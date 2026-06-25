@@ -369,19 +369,34 @@ function normalizeCoord(raw) {
 // ─── CONCEPTS ────────────────────────────────────────────────────────────────
 const PV_CONCEPTS = [
   'consulta primera vez',
+  'consulta de primera vez',
+  'consulta medica',
+  'consulta médica',
+  'consulta ginecologica',
+  'consulta ginecológica',
+  'consulta basica',
+  'consulta básica',
   'fertility check up mujeres',
   'fertility check up parejas',
   'check up fertilidad mujeres',
   'check up fertilidad parejas',
+  'check up fertilidad mujer',
+  'check up fertilidad pareja',
+  'check up ginecologico',
+  'check up ginecológico',
+  'check-up ginecologico',
+  'check-up ginecológico',
+  'check-up sop',
+  'check up sop',
   'consulta primera vez online',
   'consulta primera vez gratis',
   'consulta primera vez online gratis',
-  'consulta de primera vez',
   "consulta de primera vez ip's",
   'consulta primera vez ip',
 ];
 const CAPTURA_CONCEPTS = ['captura ovular'];
-const GINE_CONCEPTS = ['check up ginecologico', 'check up ginecológico'];
+// Gine is now included in PV_CONCEPTS — keep for study detection
+const GINE_CONCEPTS = ['check up ginecologico', 'check up ginecológico', 'check-up ginecologico', 'check-up ginecológico'];
 const PLATICA_CONCEPTS = ['plática de resultados', 'platica de resultados'];
 const ADDON_HAM = ['antimulleriana amh', 'antimülleriana amh', 'hormona antimülleriana'];
 const ADDON_PAP = ['papanicolaou'];
@@ -389,6 +404,49 @@ const ADDON_DONACION = ['óvulos fi', 'ovulos fi', 'esperma fi'];
 const ADDON_VITRI = ['[ex] vitrificación', '[ex] vitrificacion', 'vitrificación de ovocitos'];
 const STUDY_KEYWORDS = ['ham','amh','antimül','antimul','hormona anti','tomar ham','tomar amh','espermatobioscopia','espermatobioscopía'];
 const EN_CONSULTA_KW = ['interpretaron','se entregan durante','se le dieron resultados','se interpretaron'];
+
+// Whitelist of internal professionals by city
+const PROF_GDL = [
+  'jorge michel',
+  'carlos parra',
+  'blanca cardenas',
+  'yazmin ramos',
+  'edna amaro',
+  'norma sharey vazquez',
+  'ana giannina garcia',
+  'ana gianina garcia',
+  'itzury padilla',
+  'diana duran',
+  'carlos macias',
+  'ruby medina',
+];
+const PROF_CDMX = [
+  'alma victoria villarreal barranca',
+  'giovanni lopez salamanca',
+  'giovanni lópez salamanca',
+  'ruben gonzalez ruiz',
+  'eugenia moran orozco',
+  'eugenia morán orozco',
+  'jaime antonio hidalgo carrera',
+  'armando miguel roque sanchez',
+  'jairo hernando pedraza pinto',
+  'miranda lucia moran morales',
+  'miranda lucía morán morales',
+  'monica olavarria',
+  'mónica olavarria',
+];
+const ALL_INTERNAL_PROF = [...PROF_GDL, ...PROF_CDMX];
+
+function normProf(p) {
+  return (p||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+}
+
+// Returns true if the row should be EXCLUDED (professional not in whitelist)
+function isExternal(row) {
+  const prof = normProf(row['Profesional'] || row['Profesional Historia'] || '');
+  if (!prof) return true; // no professional = exclude
+  return !ALL_INTERNAL_PROF.some(p => prof.includes(normProf(p)));
+}
 
 function isPV(concepto) { const c = (concepto||'').toLowerCase(); return PV_CONCEPTS.some(p => c.includes(p)); }
 function isCaptura(concepto) { return CAPTURA_CONCEPTS.some(p => (concepto||'').toLowerCase().includes(p)); }
@@ -425,10 +483,13 @@ function parseDate(raw) {
   return new Date(s);
 }
 function ciudad(entidad) {
-  const e = (entidad||'').toLowerCase();
+  const e = (entidad||'').toLowerCase().trim();
   if (e.includes('guadalajara') || e === 'gdl') return 'GDL';
-  if (e.includes('cdmx') || e.includes('ciudad de méxico')) return 'CDMX';
-  return entidad || '—';
+  if (e.includes('cdmx') || e.includes('ciudad de m')) return 'CDMX';
+  return entidad ? entidad.trim() : '—';
+}
+function getCiudad(row) {
+  return ciudad(row['Entidad (Colectivo)'] || row['Entidad'] || '');
 }
 
 // ─── FILE LOADING ─────────────────────────────────────────────────────────────
@@ -523,8 +584,8 @@ function splitCSVLine(line) {
 // ─── CONVERSION ───────────────────────────────────────────────────────────────
 function renderConversion() {
   const rows = state.citas;
-  const pvRows = rows.filter(r => isPV(r['Concepto']) && r['Estado'] !== 'Anulada');
-  const capRows = rows.filter(r => isCaptura(r['Concepto']) && r['Estado'] === 'Terminada');
+  const pvRows = rows.filter(r => isPV(r['Concepto']) && r['Estado'] !== 'Anulada' && !isExternal(r));
+  const capRows = rows.filter(r => isCaptura(r['Concepto']) && r['Estado'] === 'Terminada' && !isExternal(r));
   const noAsiste = pvRows.filter(r => r['Estado'] === 'No Asiste').length;
   const rate = pvRows.length > 0 ? Math.round(capRows.length/pvRows.length*100) : 0;
 
@@ -534,10 +595,10 @@ function renderConversion() {
   set('c-noasiste', noAsiste);
 
   // City split
-  const gdlPV = pvRows.filter(r=>ciudad(r['Entidad (Colectivo)'])==='GDL').length;
-  const cdmxPV = pvRows.filter(r=>ciudad(r['Entidad (Colectivo)'])==='CDMX').length;
-  const gdlCap = capRows.filter(r=>ciudad(r['Entidad (Colectivo)'])==='GDL').length;
-  const cdmxCap = capRows.filter(r=>ciudad(r['Entidad (Colectivo)'])==='CDMX').length;
+  const gdlPV = pvRows.filter(r=>getCiudad(r)==='GDL').length;
+  const cdmxPV = pvRows.filter(r=>getCiudad(r)==='CDMX').length;
+  const gdlCap = capRows.filter(r=>getCiudad(r)==='GDL').length;
+  const cdmxCap = capRows.filter(r=>getCiudad(r)==='CDMX').length;
   document.getElementById('city-split-conv').innerHTML = citySplitHTML(
     {pv:gdlPV, cap:gdlCap}, {pv:cdmxPV, cap:cdmxCap}, 'Primeras veces', 'Capturas ovulares'
   );
@@ -546,7 +607,7 @@ function renderConversion() {
   const tbody = document.getElementById('tbody-pv');
   tbody.innerHTML = pvRows.map(r => {
     const coord = normalizeCoord(r['Usuario Crea']||r['Profesional Historia']);
-    const c = ciudad(r['Entidad (Colectivo)']);
+    const c = getCiudad(r);
     const estado = r['Estado']||'';
     const estadoBadge = estado==='Terminada' ? `<span class="badge b-green">Terminada</span>`
       : estado==='No Asiste' ? `<span class="badge b-red">No asiste</span>`
@@ -565,7 +626,7 @@ function renderConversion() {
   // Capturas table
   const tbodyCap = document.getElementById('tbody-cap');
   tbodyCap.innerHTML = capRows.map(r => {
-    const c = ciudad(r['Entidad (Colectivo)']);
+    const c = getCiudad(r);
     return `<tr>
       <td class="td-muted">${fmtDate(r['Fecha'])}</td>
       <td class="td-name">${r['Apellidos, Nombre']||'—'}</td>
@@ -744,15 +805,18 @@ function renderPlatica() {
     isPV(r['Concepto']) &&
     r['Estado'] !== 'Anulada' &&
     r['Estado'] !== 'Reasignada' &&
+    !isExternal(r) &&
     hasStudy(r['Concepto'], r['Obs.'])
   );
 
-  // Also gine with study
+  // Also gine with study (already included in PV_CONCEPTS but keep for safety)
   const gineConEstudio = rows.filter(r =>
     isGine(r['Concepto']) &&
     r['Estado'] !== 'Anulada' &&
     r['Estado'] !== 'Reasignada' &&
-    hasStudy(r['Concepto'], r['Obs.'])
+    !isExternal(r) &&
+    hasStudy(r['Concepto'], r['Obs.']) &&
+    !isPV(r['Concepto']) // avoid double-counting
   );
 
   const conEstudio = [...pvConEstudio, ...gineConEstudio];
@@ -767,7 +831,7 @@ function renderPlatica() {
     const enConsulta = isEnConsulta(obs);
     const tienePlatica = platicaNames.has(name);
     const coord = normalizeCoord(r['Usuario Crea']);
-    const c = ciudad(r['Entidad (Colectivo)']);
+    const c = getCiudad(r);
     const fechaStr = fmtDate(r['Fecha']);
     const dias = daysSince(fechaStr);
 
@@ -855,9 +919,9 @@ function renderPlatica() {
 // ─── RESUMEN ──────────────────────────────────────────────────────────────────
 function renderResumen() {
   const citas = state.citas || [];
-  const pvRows = citas.filter(r => isPV(r['Concepto']) && r['Estado'] !== 'Anulada');
-  const capRows = citas.filter(r => isCaptura(r['Concepto']) && r['Estado'] === 'Terminada');
-  const conEstudio = citas.filter(r => (isPV(r['Concepto'])||isGine(r['Concepto'])) && r['Estado']!=='Anulada' && r['Estado']!=='Reasignada' && hasStudy(r['Concepto'],r['Obs.']));
+  const pvRows = citas.filter(r => isPV(r['Concepto']) && r['Estado'] !== 'Anulada' && !isExternal(r));
+  const capRows = citas.filter(r => isCaptura(r['Concepto']) && r['Estado'] === 'Terminada' && !isExternal(r));
+  const conEstudio = citas.filter(r => isPV(r['Concepto']) && r['Estado']!=='Anulada' && r['Estado']!=='Reasignada' && !isExternal(r) && hasStudy(r['Concepto'],r['Obs.']));
   const platicaRows = citas.filter(r => isPlatica(r['Concepto']) && r['Estado']!=='Anulada');
   const platicaNames = new Set(platicaRows.map(r=>normName(r['Apellidos, Nombre'])));
   const sinPlatica = conEstudio.filter(r => !platicaNames.has(normName(r['Apellidos, Nombre'])) && !isEnConsulta(r['Obs.']||''));
@@ -870,10 +934,10 @@ function renderResumen() {
   set('r-sinplat', sinPlatica.length);
 
   // City split resumen
-  const gdlPV = pvRows.filter(r=>ciudad(r['Entidad (Colectivo)'])==='GDL').length;
-  const cdmxPV = pvRows.filter(r=>ciudad(r['Entidad (Colectivo)'])==='CDMX').length;
-  const gdlCap = capRows.filter(r=>ciudad(r['Entidad (Colectivo)'])==='GDL').length;
-  const cdmxCap = capRows.filter(r=>ciudad(r['Entidad (Colectivo)'])==='CDMX').length;
+  const gdlPV = pvRows.filter(r=>getCiudad(r)==='GDL').length;
+  const cdmxPV = pvRows.filter(r=>getCiudad(r)==='CDMX').length;
+  const gdlCap = capRows.filter(r=>getCiudad(r)==='GDL').length;
+  const cdmxCap = capRows.filter(r=>getCiudad(r)==='CDMX').length;
   document.getElementById('city-split-resumen').innerHTML = citySplitHTML(
     {pv:gdlPV,cap:gdlCap},{pv:cdmxPV,cap:cdmxCap},'Primeras veces','Capturas'
   );
