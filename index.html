@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Auditoría · Coordinadoras de Experiencia · FI</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --surface: #ffffff;
+    --border: #e4e6ea;
+    --text: #111827;
+    --muted: #6b7280;
+    --small: #9ca3af;
+    --green-dark: #1E2A1E;
+    --green-mid: #4A7A3A;
+    --green-light: #e3f0e3;
+    --red: #dc2626;
+    --red-light: #fef2f2;
+    --amber: #d97706;
+    --amber-light: #fffbeb;
+    --blue: #2563eb;
+    --blue-light: #eff6ff;
+    --radius: 8px;
+    --shadow: 0 1px 4px rgba(0,0,0,0.08);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* NAV */
+  .topnav { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 28px; display: flex; align-items: center; justify-content: space-between; height: 58px; position: sticky; top: 0; z-index: 100; }
+  .nav-left { display: flex; align-items: center; gap: 12px; }
+  .fi-logo { background: var(--green-dark); color: #fff; font-size: 12px; font-weight: 800; width: 34px; height: 34px; border-radius: 7px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .nav-title h1 { font-size: 14px; font-weight: 700; }
+  .nav-title p { font-size: 11px; color: var(--muted); margin-top: 1px; }
+  .nav-right { display: flex; gap: 8px; align-items: center; }
+  .week-badge { font-size: 11px; font-weight: 600; background: var(--green-light); color: var(--green-mid); padding: 4px 10px; border-radius: 20px; }
+  .upload-btn { font-size: 12px; font-weight: 600; background: var(--green-dark); color: #fff; padding: 7px 14px; border-radius: 6px; cursor: pointer; border: none; }
+  .upload-btn:hover { background: #2d3d2d; }
+
+  /* TABS */
+  .tabs-bar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 28px; display: flex; }
+  .tab { padding: 13px 18px; font-size: 12.5px; font-weight: 600; color: var(--muted); cursor: pointer; border-bottom: 2.5px solid transparent; transition: all 0.15s; white-space: nowrap; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--green-dark); border-bottom-color: var(--green-dark); }
+
+  /* PANELS */
+  .panel { display: none; padding: 24px 28px; }
+  .panel.active { display: block; }
+
+  /* LOADING */
+  .loading-state { text-align: center; padding: 80px 20px; color: var(--muted); }
+  .loading-state h2 { font-size: 16px; margin-bottom: 8px; color: var(--text); }
+  .loading-state p { font-size: 13px; line-height: 1.6; }
+  .upload-area { margin: 24px auto; max-width: 480px; border: 2px dashed var(--border); border-radius: var(--radius); padding: 32px; cursor: pointer; transition: border-color 0.2s; }
+  .upload-area:hover { border-color: var(--green-mid); }
+  .upload-area h3 { font-size: 14px; margin-bottom: 6px; }
+  .upload-area p { font-size: 12px; color: var(--muted); }
+  .file-input { display: none; }
+
+  /* KPI GRID */
+  .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+  .kpi-card { background: var(--surface); border-radius: var(--radius); padding: 16px 18px; border-left: 4px solid var(--border); box-shadow: var(--shadow); }
+  .kpi-card.k-neutral { border-left-color: var(--green-dark); }
+  .kpi-card.k-green  { border-left-color: #16a34a; }
+  .kpi-card.k-amber  { border-left-color: var(--amber); }
+  .kpi-card.k-red    { border-left-color: var(--red); }
+  .kpi-card.k-blue   { border-left-color: var(--blue); }
+  .kpi-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; color: var(--small); margin-bottom: 8px; }
+  .kpi-num { font-size: 32px; font-weight: 700; line-height: 1; color: var(--text); }
+  .kpi-card.k-green  .kpi-num { color: #16a34a; }
+  .kpi-card.k-amber  .kpi-num { color: var(--amber); }
+  .kpi-card.k-red    .kpi-num { color: var(--red); }
+  .kpi-card.k-blue   .kpi-num { color: var(--blue); }
+  .kpi-sub { font-size: 11px; color: var(--muted); margin-top: 5px; }
+
+  /* SECTION */
+  .section { margin-bottom: 24px; }
+  .sec-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .sec-title { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); }
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 20px; font-size: 10px; font-weight: 700; }
+  .pill-red   { background: var(--red-light); color: var(--red); }
+  .pill-green { background: var(--green-light); color: var(--green-mid); }
+  .pill-amber { background: var(--amber-light); color: var(--amber); }
+  .pill-blue  { background: var(--blue-light); color: var(--blue); }
+  .pill-grey  { background: #f3f4f6; color: #6b7280; }
+
+  /* TABLE */
+  .tbl-wrap { background: var(--surface); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  thead tr { background: #f9fafb; border-bottom: 1px solid var(--border); }
+  thead th { padding: 9px 12px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--small); white-space: nowrap; }
+  tbody tr { border-bottom: 1px solid #f3f4f6; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: #fafbfc; }
+  tbody td { padding: 9px 12px; vertical-align: middle; }
+  .td-name { font-weight: 600; }
+  .td-muted { color: var(--muted); font-size: 11px; }
+  .td-obs { color: var(--muted); font-size: 11px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .td-red { color: var(--red); font-weight: 700; }
+  .td-green { color: #16a34a; font-weight: 600; }
+  .td-amber { color: var(--amber); font-weight: 600; }
+
+  /* BADGE */
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 10px; font-weight: 700; }
+  .b-green  { background: var(--green-light); color: var(--green-mid); }
+  .b-red    { background: var(--red-light); color: var(--red); }
+  .b-amber  { background: var(--amber-light); color: var(--amber); }
+  .b-blue   { background: var(--blue-light); color: var(--blue); }
+  .b-grey   { background: #f3f4f6; color: #6b7280; }
+  .b-teal   { background: #f0fdf4; color: #065f46; }
+
+  .tag { display: inline-block; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; }
+  .tag-gdl  { background: #ecfdf5; color: #065f46; }
+  .tag-cdmx { background: var(--blue-light); color: #1d4ed8; }
+
+  /* ALERT */
+  .alert { border-radius: var(--radius); padding: 12px 16px; margin-bottom: 14px; font-size: 12px; line-height: 1.6; }
+  .alert-red   { background: var(--red-light); border: 1px solid #fecaca; color: #991b1b; }
+  .alert-amber { background: var(--amber-light); border: 1px solid #fde68a; color: #92400e; }
+  .alert-green { background: var(--green-light); border: 1px solid #bbf7d0; color: #14532d; }
+
+  /* COORD GRID */
+  .coord-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+  .coord-card { background: var(--surface); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); border-top: 3px solid var(--border); }
+  .coord-card.cc-green { border-top-color: #16a34a; }
+  .coord-card.cc-amber { border-top-color: var(--amber); }
+  .coord-card.cc-red   { border-top-color: var(--red); }
+  .coord-name { font-size: 13px; font-weight: 700; margin-bottom: 10px; }
+  .coord-stat { display: flex; justify-content: space-between; font-size: 11.5px; padding: 4px 0; border-bottom: 1px solid #f3f4f6; }
+  .coord-stat:last-child { border-bottom: none; }
+  .coord-stat .cs-lbl { color: var(--muted); }
+  .coord-stat .cs-val { font-weight: 700; }
+  .cs-val.v-green { color: #16a34a; }
+  .cs-val.v-red   { color: var(--red); }
+  .cs-val.v-amber { color: var(--amber); }
+
+  /* PROGRESS BAR */
+  .bar-wrap { background: var(--surface); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow); margin-bottom: 20px; }
+  .bar-label { font-size: 11.5px; font-weight: 600; color: var(--text); margin-bottom: 5px; }
+  .bar-track { height: 24px; border-radius: 4px; overflow: hidden; background: #f3f4f6; display: flex; margin-bottom: 4px; }
+  .bar-seg { display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: #fff; min-width: 0; transition: width 0.4s; }
+  .bs-green { background: #16a34a; }
+  .bs-red   { background: var(--red); }
+  .bs-amber { background: var(--amber); }
+  .bs-grey  { background: #d1d5db; }
+  .bar-legend { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 10px; }
+  .bl-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); }
+  .bl-dot  { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+
+  .footnote { font-size: 10.5px; color: var(--small); margin-top: 6px; }
+  .divider { height: 1px; background: var(--border); margin: 20px 0; }
+
+  /* FILTER BAR */
+  .filter-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; }
+  .filter-bar label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .filter-btn { padding: 5px 14px; border-radius: 20px; font-size: 11.5px; font-weight: 600; cursor: pointer; border: 1.5px solid var(--border); background: white; color: var(--muted); transition: all 0.15s; }
+  .filter-btn:hover { border-color: var(--green-mid); color: var(--green-mid); }
+  .filter-btn.active { background: var(--green-dark); color: white; border-color: var(--green-dark); }
+
+  /* CITY SPLIT */
+  .city-split { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+  .city-box { background: var(--surface); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow); }
+  .city-box h3 { font-size: 12px; font-weight: 700; color: var(--text); margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+  .city-row { display: flex; justify-content: space-between; font-size: 12px; padding: 5px 0; border-bottom: 1px solid #f9fafb; }
+  .city-row:last-child { border-bottom: none; }
+  .city-row .cr-lbl { color: var(--muted); }
+  .city-row .cr-val { font-weight: 700; }
+</style>
+</head>
+<body>
+
+<!-- TOP NAV -->
+<div class="topnav">
+  <div class="nav-left">
+    <div class="fi-logo">FI</div>
+    <div class="nav-title">
+      <h1>Auditoría · Coordinadoras de Experiencia</h1>
+      <p>Fertilidad Integral · GDL y CDMX</p>
+    </div>
+  </div>
+  <div class="nav-right">
+    <span class="week-badge" id="week-badge">Sin datos</span>
+    <button class="upload-btn" onclick="document.getElementById('file-citas-gdl').click()">📂 Citas GDL</button>
+    <button class="upload-btn" onclick="document.getElementById('file-citas-cdmx').click()">📂 Citas CDMX</button>
+    <button class="upload-btn" onclick="document.getElementById('file-cargos').click()">📂 Cargar Cargos</button>
+    <input type="file" id="file-citas-gdl" class="file-input" accept=".xlsx,.xls,.txt,.tsv" onchange="loadFile(this,'citas_gdl')">
+    <input type="file" id="file-citas-cdmx" class="file-input" accept=".xlsx,.xls,.txt,.tsv" onchange="loadFile(this,'citas_cdmx')">
+    <input type="file" id="file-cargos" class="file-input" accept=".xlsx,.xls,.txt,.tsv" onchange="loadFile(this,'cargos')">
+  </div>
+</div>
+
+<!-- TABS -->
+<div class="tabs-bar">
+  <div class="tab active" id="tab-resumen"    onclick="showTab('resumen')">Resumen General</div>
+  <div class="tab"        id="tab-conversion" onclick="showTab('conversion')">Conversión</div>
+  <div class="tab"        id="tab-addons"     onclick="showTab('addons')">Add-ons</div>
+  <div class="tab"        id="tab-experiencia"onclick="showTab('experiencia')">Experiencia</div>
+  <div class="tab"        id="tab-platica"    onclick="showTab('platica')">Plática de Resultados</div>
+</div>
+
+<!-- PANEL: RESUMEN -->
+<div class="panel active" id="panel-resumen">
+  <div class="loading-state" id="loading-resumen">
+    <h2>Carga los archivos de esta semana</h2>
+    <p>Exporta de Vrepro el archivo de <strong>Citas</strong> y el de <strong>Cargos</strong> de la semana,<br>y cárgalos con los botones de arriba. El dashboard se actualiza automáticamente.</p>
+    <div style="margin-top:20px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+      <div style="background:white;border-radius:8px;padding:16px 20px;box-shadow:var(--shadow);text-align:left;max-width:220px;">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">Citas GDL</div>
+        <div style="font-size:12px;line-height:1.6;">Export de citas de Guadalajara.</div>
+        <div style="margin-top:8px;" id="status-citas_gdl"><span class="badge b-grey">Sin cargar</span></div>
+      </div>
+      <div style="background:white;border-radius:8px;padding:16px 20px;box-shadow:var(--shadow);text-align:left;max-width:220px;">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">Citas CDMX</div>
+        <div style="font-size:12px;line-height:1.6;">Export de citas de Ciudad de México.</div>
+        <div style="margin-top:8px;" id="status-citas_cdmx"><span class="badge b-grey">Sin cargar</span></div>
+      </div>
+      <div style="background:white;border-radius:8px;padding:16px 20px;box-shadow:var(--shadow);text-align:left;max-width:220px;">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;margin-bottom:6px;">Cargos</div>
+        <div style="font-size:12px;line-height:1.6;">Export de cargos de la semana.</div>
+        <div style="margin-top:8px;" id="status-cargos"><span class="badge b-grey">Sin cargar</span></div>
+      </div>
+    </div>
+  </div>
+  <div id="content-resumen" style="display:none;">
+    <div class="kpi-grid">
+      <div class="kpi-card k-neutral"><div class="kpi-label">Primeras veces · semana</div><div class="kpi-num" id="r-pv">—</div><div class="kpi-sub" id="r-pv-split">GDL + CDMX</div></div>
+      <div class="kpi-card k-blue"><div class="kpi-label">Capturas ovulares</div><div class="kpi-num" id="r-cap">—</div><div class="kpi-sub">Terminadas</div></div>
+      <div class="kpi-card k-green"><div class="kpi-label">Pláticas registradas</div><div class="kpi-num" id="r-plat">—</div><div class="kpi-sub" id="r-plat-pct">% de primeras veces con estudio</div></div>
+      <div class="kpi-card k-red"><div class="kpi-label">Sin plática registrada</div><div class="kpi-num" id="r-sinplat">—</div><div class="kpi-sub">Requieren seguimiento</div></div>
+    </div>
+    <div class="city-split" id="city-split-resumen"></div>
+    <div class="section">
+      <div class="sec-head"><div class="sec-title">Resumen por coordinadora</div></div>
+      <div class="coord-grid" id="coord-grid-resumen"></div>
+    </div>
+  </div>
+</div>
+
+<!-- PANEL: CONVERSIÓN -->
+<div class="panel" id="panel-conversion">
+  <div class="loading-state" id="loading-conversion"><h2>Carga el archivo de Citas</h2><p>Necesitas cargar el export de citas para ver los datos de conversión.</p></div>
+  <div id="content-conversion" style="display:none;">
+    <div class="filter-bar" id="filter-conversion">
+      <label>Coordinadora:</label>
+    </div>
+    <div class="kpi-grid">
+      <div class="kpi-card k-neutral"><div class="kpi-label">Primeras veces</div><div class="kpi-num" id="c-pv">—</div><div class="kpi-sub">Consultas + Check ups</div></div>
+      <div class="kpi-card k-blue"><div class="kpi-label">Capturas ovulares</div><div class="kpi-num" id="c-cap">—</div><div class="kpi-sub">Terminadas esta semana</div></div>
+      <div class="kpi-card k-green"><div class="kpi-label">Tasa de conversión</div><div class="kpi-num" id="c-rate">—</div><div class="kpi-sub">Capturas / Primeras veces</div></div>
+      <div class="kpi-card k-amber"><div class="kpi-label">No asistencias</div><div class="kpi-num" id="c-noasiste">—</div><div class="kpi-sub">Primera vez · No asiste</div></div>
+    </div>
+    <div class="city-split" id="city-split-conv"></div>
+    <div class="section">
+      <div class="sec-head"><div class="sec-title">Consultas de primera vez · detalle</div></div>
+      <div class="tbl-wrap"><table id="tbl-pv">
+        <thead><tr><th>Fecha</th><th>Paciente</th><th>Ciudad</th><th>Tipo</th><th>Doctor</th><th>Coordinadora</th><th>Estado</th></tr></thead>
+        <tbody id="tbody-pv"></tbody>
+      </table></div>
+    </div>
+    <div class="section" style="margin-top:20px;">
+      <div class="sec-head"><div class="sec-title">Capturas ovulares · detalle</div></div>
+      <div class="tbl-wrap"><table id="tbl-cap">
+        <thead><tr><th>Fecha</th><th>Paciente</th><th>Ciudad</th><th>Doctor</th><th>Estado</th></tr></thead>
+        <tbody id="tbody-cap"></tbody>
+      </table></div>
+    </div>
+  </div>
+</div>
+
+<!-- PANEL: ADD-ONS -->
+<div class="panel" id="panel-addons">
+  <div class="loading-state" id="loading-addons"><h2>Carga el archivo de Cargos</h2><p>Necesitas cargar el export de cargos para ver los add-ons.</p></div>
+  <div id="content-addons" style="display:none;">
+    <div class="filter-bar" id="filter-addons">
+      <label>Coordinadora:</label>
+    </div>
+    <div class="kpi-grid">
+      <div class="kpi-card k-neutral"><div class="kpi-label">Total add-ons · semana</div><div class="kpi-num" id="a-total">—</div><div class="kpi-sub">Todos los tipos</div></div>
+      <div class="kpi-card k-green"><div class="kpi-label">Donación de gametos</div><div class="kpi-num" id="a-donacion">—</div><div class="kpi-sub">Óvulos FI / Esperma FI</div></div>
+      <div class="kpi-card k-blue"><div class="kpi-label">HAM o PAP en Gine</div><div class="kpi-num" id="a-hgine">—</div><div class="kpi-sub">Check up Gine + estudio</div></div>
+      <div class="kpi-card k-amber"><div class="kpi-label">Vitrificación desde Gine</div><div class="kpi-num" id="a-vitri">—</div><div class="kpi-sub">Gine → Vitrificación</div></div>
+    </div>
+    <div class="section">
+      <div class="sec-head"><div class="sec-title">Detalle de add-ons vendidos</div></div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Fecha</th><th>Paciente</th><th>Ciudad</th><th>Add-on</th><th>Categoría</th><th>Monto</th></tr></thead>
+        <tbody id="tbody-addons"></tbody>
+      </table></div>
+    </div>
+  </div>
+</div>
+
+<!-- PANEL: EXPERIENCIA -->
+<div class="panel" id="panel-experiencia">
+  <div class="loading-state" id="loading-experiencia">
+    <h2>Carga el archivo de Citas</h2>
+    <p>Este panel muestra los datos del expediente del paciente desde el Google Sheet de IT.<br>Se actualiza automáticamente al cargar las citas.</p>
+  </div>
+  <div id="content-experiencia" style="display:none;">
+    <div class="filter-bar" id="filter-experiencia">
+      <label>Coordinadora:</label>
+    </div>
+    <div class="kpi-grid">
+      <div class="kpi-card k-neutral"><div class="kpi-label">Pacientes auditados</div><div class="kpi-num" id="e-total">—</div><div class="kpi-sub">Primeras veces en el sheet de IT</div></div>
+      <div class="kpi-card k-green"><div class="kpi-label">Expediente completo</div><div class="kpi-num" id="e-completo">—</div><div class="kpi-sub">Demog + Contacto + CP + Clasificación</div></div>
+      <div class="kpi-card k-red"><div class="kpi-label">Expediente incompleto</div><div class="kpi-num" id="e-incompleto">—</div><div class="kpi-sub">Al menos un campo faltante</div></div>
+      <div class="kpi-card k-amber"><div class="kpi-label">% Cumplimiento</div><div class="kpi-num" id="e-pct">—</div><div class="kpi-sub">Completitud del expediente</div></div>
+    </div>
+    <div class="alert alert-amber" id="sheet-status">
+      ⏳ Cargando datos del Google Sheet de IT...
+    </div>
+    <div class="section">
+      <div class="sec-head"><div class="sec-title">Por coordinadora · cumplimiento del expediente</div></div>
+      <div class="coord-grid" id="coord-grid-exp"></div>
+    </div>
+    <div class="section">
+      <div class="sec-head"><div class="sec-title">Pacientes con expediente incompleto</div><span class="pill pill-red" id="pill-incompleto"></span></div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Paciente</th><th>Fecha</th><th>Coordinadora</th><th>Ciudad</th><th>Demog</th><th>Contacto</th><th>CP</th><th>Clasificación</th></tr></thead>
+        <tbody id="tbody-incompleto"></tbody>
+      </table></div>
+    </div>
+  </div>
+</div>
+
+<!-- PANEL: PLÁTICA DE RESULTADOS -->
+<div class="panel" id="panel-platica">
+  <div class="loading-state" id="loading-platica"><h2>Carga el archivo de Citas</h2><p>Necesitas cargar el export de citas para ver la auditoría de plática de resultados.</p></div>
+  <div id="content-platica" style="display:none;">
+    <div class="filter-bar" id="filter-platica">
+      <label>Coordinadora:</label>
+    </div>
+    <div class="kpi-grid">
+      <div class="kpi-card k-neutral"><div class="kpi-label">Primeras veces con estudio</div><div class="kpi-num" id="p-total">—</div><div class="kpi-sub">Requieren plática de resultados</div></div>
+      <div class="kpi-card k-green"><div class="kpi-label">Plática registrada</div><div class="kpi-num" id="p-si">—</div><div class="kpi-sub" id="p-si-pct">% del total</div></div>
+      <div class="kpi-card k-amber"><div class="kpi-label">Entregados en consulta</div><div class="kpi-num" id="p-enconsulta">—</div><div class="kpi-sub">Sin registro formal en Vrepro</div></div>
+      <div class="kpi-card k-red"><div class="kpi-label">Sin plática registrada</div><div class="kpi-num" id="p-no">—</div><div class="kpi-sub" id="p-no-pct">% del total</div></div>
+    </div>
+    <div class="city-split" id="city-split-plat"></div>
+    <div class="section">
+      <div class="sec-head"><div class="sec-title">Pacientes sin plática registrada</div><span class="pill pill-red" id="pill-sinplat"></span></div>
+      <div id="alert-sinplat"></div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Fecha Consulta</th><th>Paciente</th><th>Ciudad</th><th>Tipo de consulta</th><th>Coordinadora</th><th>Días sin plática</th><th>Observaciones</th></tr></thead>
+        <tbody id="tbody-sinplat"></tbody>
+      </table></div>
+    </div>
+    <div class="section" style="margin-top:20px;">
+      <div class="sec-head"><div class="sec-title">Entregados en consulta · validar con doctor</div><span class="pill pill-amber" id="pill-enconsulta"></span></div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Fecha</th><th>Paciente</th><th>Ciudad</th><th>Tipo</th><th>Nota</th></tr></thead>
+        <tbody id="tbody-enconsulta"></tbody>
+      </table></div>
+    </div>
+    <div class="section" style="margin-top:20px;">
+      <div class="sec-head"><div class="sec-title">Plática completada ✔</div><span class="pill pill-green" id="pill-completa"></span></div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Fecha Consulta</th><th>Paciente</th><th>Ciudad</th><th>Tipo</th><th>Plática</th><th>Doctor</th></tr></thead>
+        <tbody id="tbody-completa"></tbody>
+      </table></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── STATE ───────────────────────────────────────────────────────────────────
+const state = { citas_gdl: null, citas_cdmx: null, cargos: null, sheetIT: null };
+const TODAY = new Date();
+
+// ─── DOCTOR → COORDINADORA MAPPING ──────────────────────────────────────────
+// GDL
+const DOCTOR_COORD_GDL = {
+  'ana giannina garcia':   'Viviana',
+  'ana gianina garcia':    'Viviana',
+  'jorge michel':          'Viviana',
+  'yazmin ramos':          'Viviana',
+  'diana duran':           'Viviana',   // Diana Duran GDL = Viviana
+  'carlos macias':         'Elisa',
+  'carlos parra':          'Elisa',
+  'blanca cardenas':       'Elisa',
+  'norma sharey vazquez':  'Elisa',
+  'edna amaro':            'Elisa',
+  'ruby medina':           'Elisa',
+  'itzury padilla':        'Elisa',
+};
+// CDMX
+const DOCTOR_COORD_CDMX = {
+  'armando miguel roque sanchez': 'Jimena',
+  'ruben gonzalez ruiz':          'Reyna',
+  'jaime antonio hidalgo carrera':'Reyna',
+  'giovanni lopez salamanca':     'Reyna',
+  'giovanni lópez salamanca':     'Reyna',
+  'miranda lucia moran morales':  'Andrea',
+  'miranda lucía morán morales':  'Andrea',
+  'alma victoria villarreal barranca': 'Andrea',
+  'jairo hernando pedraza pinto': 'Lucy',
+  'monica olavarria':             'Lucy',
+  'mónica olavarria':             'Lucy',
+  'eugenia moran orozco':         'Sharon',
+  'eugenia morán orozco':         'Sharon',
+};
+
+const COORD_LIST = ['Viviana','Elisa','Reyna','Jimena','Lucy','Sharon','Andrea'];
+
+// ─── FILTER STATE ────────────────────────────────────────────────────────────
+const activeFilters = { conversion: null, addons: null, experiencia: null, platica: null };
+
+function initFilters() {
+  const panels = ['conversion','addons','experiencia','platica'];
+  panels.forEach(panel => {
+    const bar = document.getElementById(`filter-${panel}`);
+    if (!bar) return;
+    // Clear existing buttons (keep label)
+    const label = bar.querySelector('label');
+    bar.innerHTML = '';
+    bar.appendChild(label);
+    // "Todas" button
+    const allBtn = document.createElement('button');
+    allBtn.className = 'filter-btn active';
+    allBtn.textContent = 'Todas';
+    allBtn.onclick = () => setFilter(panel, null, allBtn);
+    bar.appendChild(allBtn);
+    // One button per coord
+    COORD_LIST.forEach(coord => {
+      const btn = document.createElement('button');
+      btn.className = 'filter-btn';
+      btn.textContent = coord;
+      btn.onclick = () => setFilter(panel, coord, btn);
+      bar.appendChild(btn);
+    });
+  });
+}
+
+function setFilter(panel, coord, clickedBtn) {
+  activeFilters[panel] = coord;
+  const bar = document.getElementById(`filter-${panel}`);
+  bar.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  clickedBtn.classList.add('active');
+  // Re-render the affected panel
+  if (panel === 'conversion') renderConversion();
+  if (panel === 'addons') renderAddons();
+  if (panel === 'experiencia') renderExperiencia();
+  if (panel === 'platica') renderPlatica();
+}
+
+function filterByCoord(rows, panel) {
+  const coord = activeFilters[panel];
+  if (!coord) return rows;
+  return rows.filter(r => getCoord(r, getCiudad(r)) === coord);
+}
+
+function normProf(p) {
+  return (p||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+}
+
+// Get coordinator from doctor name + city
+function getCoord(row, cityOverride) {
+  const prof = normProf(row['Profesional'] || '');
+  const city = cityOverride || getCiudad(row);
+  const map = city === 'GDL' ? DOCTOR_COORD_GDL : DOCTOR_COORD_CDMX;
+  for (const [doctor, coord] of Object.entries(map)) {
+    if (prof.includes(normProf(doctor))) return coord;
+  }
+  return null;
+}
+
+// Legacy - kept for sheet IT compatibility
+function normalizeCoord(raw) {
+  if (!raw) return null;
+  const r = normProf(raw);
+  const allMaps = {...DOCTOR_COORD_GDL, ...DOCTOR_COORD_CDMX};
+  for (const [doctor, coord] of Object.entries(allMaps)) {
+    if (r.includes(normProf(doctor))) return coord;
+  }
+  // fallback name-based
+  const nameMap = {'viviana':'Viviana','elisa':'Elisa','reyna':'Reyna','jimena':'Jimena',
+    'lucy':'Lucy','lucia':'Lucy','sharon':'Sharon','andrea':'Andrea'};
+  for (const [key, name] of Object.entries(nameMap)) {
+    if (r.includes(key)) return name;
+  }
+  return null;
+}
+
+// ─── CONCEPTS ────────────────────────────────────────────────────────────────
+const PV_CONCEPTS = [
+  'consulta primera vez',
+  'consulta de primera vez',
+  'consulta medica',
+  'consulta médica',
+  'consulta ginecologica',
+  'consulta ginecológica',
+  'consulta basica',
+  'consulta básica',
+  'fertility check up mujeres',
+  'fertility check up parejas',
+  'check up fertilidad mujeres',
+  'check up fertilidad parejas',
+  'check up fertilidad mujer',
+  'check up fertilidad pareja',
+  'check up ginecologico',
+  'check up ginecológico',
+  'check-up ginecologico',
+  'check-up ginecológico',
+  'check-up sop',
+  'check up sop',
+  'consulta primera vez online',
+  'consulta primera vez gratis',
+  'consulta primera vez online gratis',
+  "consulta de primera vez ip's",
+  'consulta primera vez ip',
+];
+const CAPTURA_CONCEPTS = ['captura ovular'];
+// Gine is now included in PV_CONCEPTS — keep for study detection
+const GINE_CONCEPTS = ['check up ginecologico', 'check up ginecológico', 'check-up ginecologico', 'check-up ginecológico'];
+const PLATICA_CONCEPTS = ['plática de resultados', 'platica de resultados'];
+const ADDON_HAM = ['antimulleriana amh', 'antimülleriana amh', 'hormona antimülleriana'];
+const ADDON_PAP = ['papanicolaou'];
+const ADDON_DONACION = ['óvulos fi', 'ovulos fi', 'esperma fi'];
+const ADDON_VITRI = ['[ex] vitrificación', '[ex] vitrificacion', 'vitrificación de ovocitos'];
+const STUDY_KEYWORDS = ['ham','amh','antimül','antimul','hormona anti','tomar ham','tomar amh','espermatobioscopia','espermatobioscopía'];
+const EN_CONSULTA_KW = ['interpretaron','se entregan durante','se le dieron resultados','se interpretaron'];
+
+// Internal professionals by city (for isExternal filter)
+const PROF_GDL = ['jorge michel','carlos parra','blanca cardenas','yazmin ramos','edna amaro',
+  'norma sharey vazquez','ana giannina garcia','ana gianina garcia','itzury padilla',
+  'diana duran','carlos macias','ruby medina'];
+const PROF_CDMX = ['alma victoria villarreal barranca','giovanni lopez salamanca',
+  'giovanni lópez salamanca','ruben gonzalez ruiz','eugenia moran orozco','eugenia morán orozco',
+  'jaime antonio hidalgo carrera','armando miguel roque sanchez','jairo hernando pedraza pinto',
+  'miranda lucia moran morales','miranda lucía morán morales','monica olavarria','mónica olavarria'];
+const ALL_INTERNAL_PROF = [...PROF_GDL, ...PROF_CDMX];
+
+// Returns true if the row should be EXCLUDED
+function isExternal(row) {
+  const prof = normProf(row['Profesional'] || '');
+  if (!prof) return true;
+  return !ALL_INTERNAL_PROF.some(p => prof.includes(normProf(p)));
+}
+
+// City: comes from which file the row belongs to (set via row.__ciudad__)
+// If not set, fallback to profesional list
+function getCiudad(row) {
+  if (row.__ciudad__) return row.__ciudad__;
+  const prof = normProf(row['Profesional'] || '');
+  if (PROF_GDL.some(p => prof.includes(normProf(p)))) return 'GDL';
+  if (PROF_CDMX.some(p => prof.includes(normProf(p)))) return 'CDMX';
+  return '—';
+}
+
+function isPV(concepto) { const c = (concepto||'').toLowerCase(); return PV_CONCEPTS.some(p => c.includes(p)); }
+function isCaptura(concepto) { return CAPTURA_CONCEPTS.some(p => (concepto||'').toLowerCase().includes(p)); }
+function isGine(concepto) { return GINE_CONCEPTS.some(p => (concepto||'').toLowerCase().includes(p)); }
+function isPlatica(concepto) { return PLATICA_CONCEPTS.some(p => (concepto||'').toLowerCase().includes(p)); }
+function hasStudy(concepto, obs) {
+  const c = (concepto||'').toLowerCase(), o = (obs||'').toLowerCase(), combined = c+' '+o;
+  if (PV_CONCEPTS.filter(p=>p.includes('fertility')||p.includes('check up')).some(p=>c.includes(p))) return true;
+  if (isGine(concepto)) return STUDY_KEYWORDS.some(k=>combined.includes(k));
+  if (isPV(concepto)) return STUDY_KEYWORDS.some(k=>combined.includes(k));
+  return false;
+}
+function isEnConsulta(obs) { const o=(obs||'').toLowerCase(); return EN_CONSULTA_KW.some(k=>o.includes(k)); }
+function normName(n) { return (n||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
+function fmtDate(d) {
+  if (!d) return '—';
+  if (typeof d === 'string') return d.slice(0,10);
+  if (d instanceof Date) return d.toISOString().slice(0,10);
+  return String(d);
+}
+function daysSince(dateStr) {
+  if (!dateStr || dateStr==='—') return null;
+  const d = new Date(dateStr.replace(/(\d{2})\/(\d{2})\/(\d{2,4})/,'$3-$2-$1'));
+  if (isNaN(d)) return null;
+  return Math.floor((TODAY - d)/(1000*60*60*24));
+}
+function parseDate(raw) {
+  if (!raw) return null;
+  if (raw instanceof Date) return raw;
+  const s = String(raw);
+  // DD/MM/YY or DD/MM/YYYY
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (m) { let y=m[3]; if(y.length===2) y='20'+y; return new Date(`${y}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`); }
+  return new Date(s);
+}
+// getCiudad defined above
+function ciudad(e) { return getCiudad({__ciudad__: e, 'Entidad (Colectivo)': e, Entidad: e}); }
+
+// ─── FILE LOADING ─────────────────────────────────────────────────────────────
+function loadFile(input, type) {
+  const file = input.files[0];
+  if (!file) return;
+  const ext = file.name.split('.').pop().toLowerCase();
+  const reader = new FileReader();
+  reader.onload = e => {
+    let rows;
+    if (ext === 'xlsx' || ext === 'xls') {
+      const wb = XLSX.read(e.target.result, {type:'binary',cellDates:true});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      rows = XLSX.utils.sheet_to_json(ws, {defval:''});
+    } else {
+      const lines = e.target.result.split('\n').filter(l=>l.trim());
+      const headers = lines[0].split('\t');
+      rows = lines.slice(1).map(l => {
+        const vals = l.split('\t');
+        const obj = {};
+        headers.forEach((h,i) => obj[h.trim()] = (vals[i]||'').replace(/^""|""$/g,'').trim());
+        return obj;
+      });
+    }
+    // Tag each row with its city
+    const cityTag = type === 'citas_gdl' ? 'GDL' : type === 'citas_cdmx' ? 'CDMX' : null;
+    if (cityTag) rows.forEach(r => r.__ciudad__ = cityTag);
+
+    state[type] = rows;
+    document.getElementById(`status-${type}`).innerHTML = `<span class="badge b-green">✔ ${rows.length} filas</span>`;
+
+    // Merge both citas files whenever either is loaded
+    if (type === 'citas_gdl' || type === 'citas_cdmx') {
+      const gdl = state.citas_gdl || [];
+      const cdmx = state.citas_cdmx || [];
+      state.citas = [...gdl, ...cdmx];
+      updateWeekBadge(state.citas);
+    }
+    renderAll();
+  };
+  if (ext === 'xlsx' || ext === 'xls') reader.readAsBinaryString(file);
+  else reader.readAsText(file, 'UTF-8');
+}
+
+function updateWeekBadge(rows) {
+  const dates = rows.map(r => parseDate(r['Fecha'])).filter(Boolean);
+  if (!dates.length) return;
+  const min = new Date(Math.min(...dates)), max = new Date(Math.max(...dates));
+  const fmt = d => d.toLocaleDateString('es-MX',{day:'2-digit',month:'short'});
+  document.getElementById('week-badge').textContent = `Semana ${fmt(min)} – ${fmt(max)}`;
+}
+
+// ─── RENDER ALL ───────────────────────────────────────────────────────────────
+function renderAll() {
+  initFilters();
+  if (state.citas && state.citas.length > 0) {
+    renderConversion();
+    renderPlatica();
+    loadSheetIT();
+  }
+  if (state.cargos) renderAddons();
+  if (state.citas || state.cargos) renderResumen();
+}
+
+// ─── GOOGLE SHEET IT ─────────────────────────────────────────────────────────
+const SHEET_ID = '17e8CWSNMe--6WRy2UTGr5zCZatNnO7xMUM9AALGMOqA';
+function loadSheetIT() {
+  document.getElementById('sheet-status').innerHTML = '⏳ Cargando datos del Google Sheet de IT...';
+  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv`;
+  fetch(url)
+    .then(r => r.text())
+    .then(csv => {
+      const rows = parseCSV(csv);
+      state.sheetIT = rows;
+      renderExperiencia();
+      document.getElementById('sheet-status').innerHTML = `<span style="color:var(--green-mid)">✔ Google Sheet cargado — ${rows.length} pacientes</span>`;
+    })
+    .catch(() => {
+      document.getElementById('sheet-status').innerHTML = `<span style="color:var(--red)">⚠ No se pudo cargar el Google Sheet. Verifica que esté compartido como "cualquiera con el link puede ver".</span>`;
+    });
+}
+function parseCSV(text) {
+  const lines = text.split('\n');
+  const headers = splitCSVLine(lines[0]);
+  return lines.slice(1).filter(l=>l.trim()).map(l => {
+    const vals = splitCSVLine(l);
+    const obj = {};
+    headers.forEach((h,i) => obj[h.trim().replace(/"/g,'')] = (vals[i]||'').replace(/^"|"$/g,'').trim());
+    return obj;
+  });
+}
+function splitCSVLine(line) {
+  const result=[]; let cur='', inQ=false;
+  for(let i=0;i<line.length;i++){
+    const c=line[i];
+    if(c==='"' && !inQ){inQ=true;}
+    else if(c==='"' && inQ && line[i+1]==='"'){cur+='"';i++;}
+    else if(c==='"' && inQ){inQ=false;}
+    else if(c===',' && !inQ){result.push(cur);cur='';}
+    else cur+=c;
+  }
+  result.push(cur);
+  return result;
+}
+
+// ─── CONVERSION ───────────────────────────────────────────────────────────────
+function renderConversion() {
+  const rows = state.citas;
+  const allPV = rows.filter(r => isPV(r['Concepto']) && r['Estado'] !== 'Anulada' && !isExternal(r));
+  const allCap = rows.filter(r => isCaptura(r['Concepto']) && r['Estado'] === 'Terminada' && !isExternal(r));
+  const pvRows = filterByCoord(allPV, 'conversion');
+  const capRows = filterByCoord(allCap, 'conversion');
+  const noAsiste = pvRows.filter(r => r['Estado'] === 'No Asiste').length;
+  const rate = pvRows.length > 0 ? Math.round(capRows.length/pvRows.length*100) : 0;
+
+  set('c-pv', pvRows.length);
+  set('c-cap', capRows.length);
+  set('c-rate', rate+'%');
+  set('c-noasiste', noAsiste);
+
+  // City split
+  const gdlPV = pvRows.filter(r=>getCiudad(r)==='GDL').length;
+  const cdmxPV = pvRows.filter(r=>getCiudad(r)==='CDMX').length;
+  const gdlCap = capRows.filter(r=>getCiudad(r)==='GDL').length;
+  const cdmxCap = capRows.filter(r=>getCiudad(r)==='CDMX').length;
+  document.getElementById('city-split-conv').innerHTML = citySplitHTML(
+    {pv:gdlPV, cap:gdlCap}, {pv:cdmxPV, cap:cdmxCap}, 'Primeras veces', 'Capturas ovulares'
+  );
+
+  // PV table
+  const tbody = document.getElementById('tbody-pv');
+  tbody.innerHTML = pvRows.map(r => {
+    const coord = getCoord(r, getCiudad(r));
+    const c = getCiudad(r);
+    const estado = r['Estado']||'';
+    const estadoBadge = estado==='Terminada' ? `<span class="badge b-green">Terminada</span>`
+      : estado==='No Asiste' ? `<span class="badge b-red">No asiste</span>`
+      : `<span class="badge b-grey">${estado}</span>`;
+    return `<tr>
+      <td class="td-muted">${fmtDate(r['Fecha'])}</td>
+      <td class="td-name">${r['Apellidos, Nombre']||'—'}</td>
+      <td><span class="tag tag-${c.toLowerCase()}">${c}</span></td>
+      <td class="td-muted">${r['Concepto']||'—'}</td>
+      <td class="td-muted">${r['Profesional']||'—'}</td>
+      <td>${coord ? `<span class="badge b-teal">${coord}</span>` : `<span class="td-muted">${(r['Usuario Crea']||'').split('(')[1]?.replace(')','')?.trim()||'—'}</span>`}</td>
+      <td>${estadoBadge}</td>
+    </tr>`;
+  }).join('');
+
+  // Capturas table
+  const tbodyCap = document.getElementById('tbody-cap');
+  tbodyCap.innerHTML = capRows.map(r => {
+    const c = getCiudad(r);
+    return `<tr>
+      <td class="td-muted">${fmtDate(r['Fecha'])}</td>
+      <td class="td-name">${r['Apellidos, Nombre']||'—'}</td>
+      <td><span class="tag tag-${c.toLowerCase()}">${c}</span></td>
+      <td class="td-muted">${r['Profesional']||'—'}</td>
+      <td><span class="badge b-green">Terminada</span></td>
+    </tr>`;
+  }).join('');
+
+  show('loading-conversion', false);
+  show('content-conversion', true);
+}
+
+// ─── ADD-ONS ──────────────────────────────────────────────────────────────────
+function renderAddons() {
+  const rows = state.cargos;
+  const addons = [];
+
+  // Group by patient
+  const byPatient = {};
+  rows.forEach(r => {
+    const name = normName(r['Historia']||r['Nombre Prod.']||'');
+    if (!byPatient[name]) byPatient[name] = [];
+    byPatient[name].push(r);
+  });
+
+  rows.forEach(r => {
+    const concepto = (r['Concepto']||'').toLowerCase();
+    const nomProd = (r['Nombre Prod.']||'').toLowerCase();
+    const combined = concepto + ' ' + nomProd;
+    const name = r['Historia']||'—';
+    const fecha = fmtDate(r['F. Cargo']);
+    const c = ciudad(r['Entidad']||'');
+    const monto = r['Tt Venta + IVA'] || r['Total Venta'] || '—';
+    const uds = parseFloat(r['Uds']||1);
+    if (uds < 0) return; // skip refunds
+
+    if (ADDON_DONACION.some(k=>combined.includes(k))) {
+      addons.push({fecha,paciente:name,ciudad:c,addon:r['Nombre Prod.']||r['Concepto'],cat:'Donación de gametos',monto,coord:null});
+    } else if (ADDON_VITRI.some(k=>combined.includes(k))) {
+      const pname = normName(name);
+      const patRows = byPatient[pname]||[];
+      const hadGine = patRows.some(pr=>isGine(pr['Concepto']));
+      if (hadGine) addons.push({fecha,paciente:name,ciudad:c,addon:'[EX] Vitrificación desde Gine',cat:'Gine → Vitrificación',monto,coord:null});
+    } else if (ADDON_HAM.some(k=>combined.includes(k))) {
+      const pname = normName(name);
+      const patRows = byPatient[pname]||[];
+      const hadGine = patRows.some(pr=>isGine(pr['Concepto']));
+      if (hadGine) addons.push({fecha,paciente:name,ciudad:c,addon:'HAM en Check up Ginecológico',cat:'HAM en Gine',monto,coord:null});
+    } else if (ADDON_PAP.some(k=>combined.includes(k))) {
+      const pname = normName(name);
+      const patRows = byPatient[pname]||[];
+      const hadGine = patRows.some(pr=>isGine(pr['Concepto']));
+      if (hadGine) addons.push({fecha,paciente:name,ciudad:c,addon:'Papanicolaou en Check up Ginecológico',cat:'PAP en Gine',monto,coord:null});
+    } else if (concepto.includes('almacenamiento')) {
+      addons.push({fecha,paciente:name,ciudad:c,addon:r['Concepto'],cat:'Almacenamiento',monto,coord:null});
+    } else if (concepto === 'farmacia' || nomProd) {
+      const supleKW = ['myo','vitamina','suplemento','omega','acido folico','ácido fólico','coenzima','q10','dhea','aspivita','inositol'];
+      if (supleKW.some(k=>combined.includes(k))) {
+        addons.push({fecha,paciente:name,ciudad:c,addon:r['Nombre Prod.']||r['Concepto'],cat:'Suplementos',monto,coord:null});
+      }
+    } else if (combined.includes('embryoscope')) {
+      addons.push({fecha,paciente:name,ciudad:c,addon:'Embryoscope',cat:'Embryoscope',monto,coord:null});
+    } else if (combined.includes('concierge')) {
+      addons.push({fecha,paciente:name,ciudad:c,addon:'Servicio Concierge',cat:'Concierge partos',monto,coord:null});
+    }
+  });
+
+  // Cross-reference with citas to assign coordinadora to each addon
+  if (state.citas) {
+    const citasByName = {};
+    state.citas.forEach(r => {
+      const n = normName(r['Apellidos, Nombre']||'');
+      if (!citasByName[n]) citasByName[n] = [];
+      citasByName[n].push(r);
+    });
+    addons.forEach(a => {
+      const citasRows = citasByName[normName(a.paciente)] || [];
+      if (citasRows.length > 0) {
+        a.coord = getCoord(citasRows[0], getCiudad(citasRows[0]));
+      }
+    });
+  }
+
+  // Apply coordinadora filter
+  const filteredAddons = activeFilters['addons']
+    ? addons.filter(a => a.coord === activeFilters['addons'])
+    : addons;
+
+  const donacion = filteredAddons.filter(a=>a.cat==='Donación de gametos').length;
+  const hgine = filteredAddons.filter(a=>['HAM en Gine','PAP en Gine'].includes(a.cat)).length;
+  const vitri = filteredAddons.filter(a=>a.cat==='Gine → Vitrificación').length;
+
+  set('a-total', filteredAddons.length);
+  set('a-donacion', donacion);
+  set('a-hgine', hgine);
+  set('a-vitri', vitri);
+
+  const CAT_COLORS = {
+    'Donación de gametos':'b-green','HAM en Gine':'b-blue','PAP en Gine':'b-blue',
+    'Gine → Vitrificación':'b-amber','Almacenamiento':'b-teal','Suplementos':'b-grey',
+    'Embryoscope':'b-blue','Concierge partos':'b-teal'
+  };
+
+  document.getElementById('tbody-addons').innerHTML = filteredAddons.length === 0
+    ? '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px;">Sin add-ons detectados esta semana</td></tr>'
+    : filteredAddons.map(a => `<tr>
+        <td class="td-muted">${a.fecha}</td>
+        <td class="td-name">${a.paciente}</td>
+        <td><span class="tag tag-${(a.ciudad||'').toLowerCase().includes('guadal')?'gdl':'cdmx'}">${a.ciudad}</span></td>
+        <td>${a.addon}</td>
+        <td><span class="badge ${CAT_COLORS[a.cat]||'b-grey'}">${a.cat}</span></td>
+        <td class="td-muted">$${Number(String(a.monto).replace(/,/g,'')||0).toLocaleString('es-MX')}</td>
+      </tr>`).join('');
+
+  show('loading-addons', false);
+  show('content-addons', true);
+}
+
+// ─── EXPERIENCIA (SHEET IT) ───────────────────────────────────────────────────
+function renderExperiencia() {
+  if (!state.sheetIT) return;
+  const rows = state.sheetIT;
+  const coordFilter = activeFilters['experiencia'];
+
+  // Filter to audited coordinadoras only
+  const audited = rows.filter(r => {
+    const coord = normalizeCoord(r['coordinadora'] || r['Coordinadora']);
+    if (!coord) return false;
+    if (coordFilter && coord !== coordFilter) return false;
+    return true;
+  });
+
+  const completo = audited.filter(r => {
+    const d = (r['demog']||'').toLowerCase();
+    const ct = (r['contacto']||'').toLowerCase();
+    const cp = (r['CP']||'').toLowerCase();
+    const cl = (r['clasificacion']||r['clasificación']||'').toLowerCase();
+    return d.includes('sí') && ct.includes('sí') && cp.includes('sí') && cl.includes('sí');
+  });
+  const incompleto = audited.filter(r => !completo.includes(r));
+  const pct = audited.length > 0 ? Math.round(completo.length/audited.length*100) : 0;
+
+  set('e-total', audited.length);
+  set('e-completo', completo.length);
+  set('e-incompleto', incompleto.length);
+  set('e-pct', pct+'%');
+
+  // By coord
+  const byCoord = {};
+  COORD_LIST.forEach(c => byCoord[c] = {total:0,completo:0});
+  audited.forEach(r => {
+    const coord = normalizeCoord(r['coordinadora']||r['Coordinadora']);
+    if (!coord || !byCoord[coord]) return;
+    byCoord[coord].total++;
+    if (completo.includes(r)) byCoord[coord].completo++;
+  });
+
+  document.getElementById('coord-grid-exp').innerHTML = COORD_LIST.filter(c=>byCoord[c].total>0).map(c => {
+    const {total, completo:comp} = byCoord[c];
+    const pct = total>0 ? Math.round(comp/total*100) : 0;
+    const cls = pct>=90?'cc-green':pct>=70?'cc-amber':'cc-red';
+    return `<div class="coord-card ${cls}">
+      <div class="coord-name">${c}</div>
+      <div class="coord-stat"><span class="cs-lbl">Pacientes auditados</span><span class="cs-val">${total}</span></div>
+      <div class="coord-stat"><span class="cs-lbl">Expediente completo</span><span class="cs-val v-green">${comp}</span></div>
+      <div class="coord-stat"><span class="cs-lbl">Expediente incompleto</span><span class="cs-val ${total-comp>0?'v-red':''}">${total-comp}</span></div>
+      <div class="coord-stat"><span class="cs-lbl">% Cumplimiento</span><span class="cs-val ${cls==='cc-green'?'v-green':cls==='cc-amber'?'v-amber':'v-red'}">${pct}%</span></div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('pill-incompleto').textContent = incompleto.length + ' pacientes';
+  document.getElementById('tbody-incompleto').innerHTML = incompleto.length === 0
+    ? '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px;">Todos los expedientes están completos ✔</td></tr>'
+    : incompleto.map(r => {
+        const coord = normalizeCoord(r['coordinadora']||'');
+        const badge = v => (v||'').toLowerCase().includes('sí')
+          ? `<span class="badge b-green">Sí</span>`
+          : `<span class="badge b-red">No</span>`;
+        return `<tr>
+          <td class="td-name">${r['paciente']||'—'}</td>
+          <td class="td-muted">${r['dia_cita']||'—'}</td>
+          <td>${coord?`<span class="badge b-teal">${coord}</span>`:'—'}</td>
+          <td><span class="tag tag-${(r['sede_cita']||r['sede']||'').toLowerCase()}">${r['sede_cita']||r['sede']||'—'}</span></td>
+          <td>${badge(r['demog'])}</td>
+          <td>${badge(r['contacto'])}</td>
+          <td>${badge(r['CP'])}</td>
+          <td>${badge(r['clasificacion']||r['clasificación'])}</td>
+        </tr>`;
+      }).join('');
+
+  show('loading-experiencia', false);
+  show('content-experiencia', true);
+}
+
+// ─── PLÁTICA DE RESULTADOS ────────────────────────────────────────────────────
+function renderPlatica() {
+  const rows = state.citas;
+  const coordFilter = activeFilters['platica'];
+
+  // All first-time patients with studies
+  const pvConEstudio = rows.filter(r =>
+    isPV(r['Concepto']) &&
+    r['Estado'] !== 'Anulada' &&
+    r['Estado'] !== 'Reasignada' &&
+    !isExternal(r) &&
+    hasStudy(r['Concepto'], r['Obs.']) &&
+    (!coordFilter || getCoord(r, getCiudad(r)) === coordFilter)
+  );
+
+  // Also gine with study (already included in PV_CONCEPTS but keep for safety)
+  const gineConEstudio = rows.filter(r =>
+    isGine(r['Concepto']) &&
+    r['Estado'] !== 'Anulada' &&
+    r['Estado'] !== 'Reasignada' &&
+    !isExternal(r) &&
+    hasStudy(r['Concepto'], r['Obs.']) &&
+    !isPV(r['Concepto']) &&
+    (!coordFilter || getCoord(r, getCiudad(r)) === coordFilter)
+  );
+
+  const conEstudio = [...pvConEstudio, ...gineConEstudio];
+
+  // Platicas registered
+  const platicaRows = rows.filter(r => isPlatica(r['Concepto']) && r['Estado'] !== 'Anulada');
+  const platicaNames = new Set(platicaRows.map(r => normName(r['Apellidos, Nombre'])));
+
+  const results = conEstudio.map(r => {
+    const name = normName(r['Apellidos, Nombre']);
+    const obs = r['Obs.']||'';
+    const enConsulta = isEnConsulta(obs);
+    const tienePlatica = platicaNames.has(name);
+    const coord = getCoord(r, getCiudad(r));
+    const c = getCiudad(r);
+    const fechaStr = fmtDate(r['Fecha']);
+    const dias = daysSince(fechaStr);
+
+    let status;
+    if (enConsulta) status = 'en_consulta';
+    else if (tienePlatica) status = 'completa';
+    else status = 'sin_platica';
+
+    return { ...r, name, status, coord, c, fechaStr, dias, obs };
+  });
+
+  const sinPlatica = results.filter(r=>r.status==='sin_platica');
+  const completa = results.filter(r=>r.status==='completa');
+  const enConsulta = results.filter(r=>r.status==='en_consulta');
+
+  set('p-total', results.length);
+  set('p-si', completa.length);
+  set('p-si-pct', results.length>0 ? Math.round(completa.length/results.length*100)+'% del total' : '—');
+  set('p-enconsulta', enConsulta.length);
+  set('p-no', sinPlatica.length);
+  set('p-no-pct', results.length>0 ? Math.round(sinPlatica.length/results.length*100)+'% del total' : '—');
+
+  // City split for platica
+  const gdlSin = sinPlatica.filter(r=>r.c==='GDL').length;
+  const cdmxSin = sinPlatica.filter(r=>r.c==='CDMX').length;
+  const gdlOk = completa.filter(r=>r.c==='GDL').length;
+  const cdmxOk = completa.filter(r=>r.c==='CDMX').length;
+  document.getElementById('city-split-plat').innerHTML = citySplitHTML(
+    {pv:pvConEstudio.filter(r=>getCiudad(r)==='GDL').length+gineConEstudio.filter(r=>getCiudad(r)==='GDL').length, sin:gdlSin, ok:gdlOk},
+    {pv:pvConEstudio.filter(r=>getCiudad(r)==='CDMX').length+gineConEstudio.filter(r=>getCiudad(r)==='CDMX').length, sin:cdmxSin, ok:cdmxOk},
+    'Con estudio', 'Sin plática'
+  );
+
+  document.getElementById('pill-sinplat').textContent = sinPlatica.length + ' pacientes';
+  document.getElementById('pill-enconsulta').textContent = enConsulta.length + ' pacientes';
+  document.getElementById('pill-completa').textContent = completa.length + ' pacientes';
+
+  if (sinPlatica.length > 0) {
+    const maxDays = Math.max(...sinPlatica.map(r=>r.dias||0));
+    document.getElementById('alert-sinplat').innerHTML = `<div class="alert alert-red" style="margin-bottom:12px;">
+      <strong>Acción requerida:</strong> ${sinPlatica.length} paciente${sinPlatica.length>1?'s':''} con estudio sin plática registrada en Vrepro.
+      El caso más antiguo tiene <strong>${maxDays} días</strong> sin seguimiento.
+    </div>`;
+  } else {
+    document.getElementById('alert-sinplat').innerHTML = '';
+  }
+
+  document.getElementById('tbody-sinplat').innerHTML = sinPlatica.length === 0
+    ? '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px;">No hay pacientes sin plática esta semana ✔</td></tr>'
+    : sinPlatica.sort((a,b)=>(b.dias||0)-(a.dias||0)).map(r => `<tr>
+        <td class="td-muted">${r.fechaStr}</td>
+        <td class="td-name">${r['Apellidos, Nombre']||'—'}</td>
+        <td><span class="tag tag-${r.c.toLowerCase()}">${r.c}</span></td>
+        <td class="td-muted">${r['Concepto']||'—'}</td>
+        <td>${r.coord?`<span class="badge b-teal">${r.coord}</span>`:'<span class="td-muted">—</span>'}</td>
+        <td class="td-red">${r.dias!=null?r.dias+' días':'—'}</td>
+        <td class="td-obs" title="${r.obs}">${r.obs.slice(0,80)||'—'}</td>
+      </tr>`).join('');
+
+  document.getElementById('tbody-enconsulta').innerHTML = enConsulta.length === 0
+    ? '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px;">Sin casos en esta categoría</td></tr>'
+    : enConsulta.map(r => `<tr>
+        <td class="td-muted">${r.fechaStr}</td>
+        <td class="td-name">${r['Apellidos, Nombre']||'—'}</td>
+        <td><span class="tag tag-${r.c.toLowerCase()}">${r.c}</span></td>
+        <td class="td-muted">${r['Concepto']||'—'}</td>
+        <td class="td-obs" title="${r.obs}">${r.obs.slice(0,100)||'—'}</td>
+      </tr>`).join('');
+
+  document.getElementById('tbody-completa').innerHTML = completa.length === 0
+    ? '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px;">Sin pláticas registradas esta semana</td></tr>'
+    : completa.map(r => `<tr>
+        <td class="td-muted">${r.fechaStr}</td>
+        <td class="td-name">${r['Apellidos, Nombre']||'—'}</td>
+        <td><span class="tag tag-${r.c.toLowerCase()}">${r.c}</span></td>
+        <td class="td-muted">${r['Concepto']||'—'}</td>
+        <td><span class="badge b-green">Registrada ✔</span></td>
+        <td class="td-muted">${r['Profesional']||'—'}</td>
+      </tr>`).join('');
+
+  show('loading-platica', false);
+  show('content-platica', true);
+}
+
+// ─── RESUMEN ──────────────────────────────────────────────────────────────────
+function renderResumen() {
+  const citas = state.citas || [];
+  const pvRows = citas.filter(r => isPV(r['Concepto']) && r['Estado'] !== 'Anulada' && !isExternal(r));
+  const capRows = citas.filter(r => isCaptura(r['Concepto']) && r['Estado'] === 'Terminada' && !isExternal(r));
+  const conEstudio = citas.filter(r => isPV(r['Concepto']) && r['Estado']!=='Anulada' && r['Estado']!=='Reasignada' && !isExternal(r) && hasStudy(r['Concepto'],r['Obs.']));
+  const platicaRows = citas.filter(r => isPlatica(r['Concepto']) && r['Estado']!=='Anulada');
+  const platicaNames = new Set(platicaRows.map(r=>normName(r['Apellidos, Nombre'])));
+  const sinPlatica = conEstudio.filter(r => !platicaNames.has(normName(r['Apellidos, Nombre'])) && !isEnConsulta(r['Obs.']||''));
+
+  set('r-pv', pvRows.length);
+  set('r-pv-split', `GDL: ${pvRows.filter(r=>getCiudad(r)==='GDL').length} · CDMX: ${pvRows.filter(r=>getCiudad(r)==='CDMX').length}`);
+  set('r-cap', capRows.length);
+  set('r-plat', platicaRows.length);
+  set('r-plat-pct', conEstudio.length>0 ? Math.round(platicaRows.length/conEstudio.length*100)+'% de primeras veces con estudio' : '—');
+  set('r-sinplat', sinPlatica.length);
+
+  // City split resumen
+  const gdlPV = pvRows.filter(r=>getCiudad(r)==='GDL').length;
+  const cdmxPV = pvRows.filter(r=>getCiudad(r)==='CDMX').length;
+  const gdlCap = capRows.filter(r=>getCiudad(r)==='GDL').length;
+  const cdmxCap = capRows.filter(r=>getCiudad(r)==='CDMX').length;
+  document.getElementById('city-split-resumen').innerHTML = citySplitHTML(
+    {pv:gdlPV,cap:gdlCap},{pv:cdmxPV,cap:cdmxCap},'Primeras veces','Capturas'
+  );
+
+  // Coord cards — use getCoord(row, city)
+  const byCoord = {};
+  COORD_LIST.forEach(c => byCoord[c] = {pv:0, sin:0, plat:0});
+  citas.forEach(r => {
+    const c = getCiudad(r);
+    const coord = getCoord(r, c);
+    if (!coord || !byCoord[coord]) return;
+    if (isPV(r['Concepto']) && r['Estado']!=='Anulada' && !isExternal(r)) byCoord[coord].pv++;
+    if (isPlatica(r['Concepto']) && r['Estado']!=='Anulada') byCoord[coord].plat++;
+  });
+  sinPlatica.forEach(r => {
+    const c = getCiudad(r);
+    const coord = getCoord(r, c);
+    if (coord && byCoord[coord]) byCoord[coord].sin++;
+  });
+
+  document.getElementById('coord-grid-resumen').innerHTML = COORD_LIST.filter(c=>byCoord[c].pv>0||byCoord[c].plat>0).map(c => {
+    const {pv,sin,plat} = byCoord[c];
+    const cls = sin===0?'cc-green':sin<=2?'cc-amber':'cc-red';
+    return `<div class="coord-card ${cls}">
+      <div class="coord-name">${c}</div>
+      <div class="coord-stat"><span class="cs-lbl">Primeras veces</span><span class="cs-val">${pv}</span></div>
+      <div class="coord-stat"><span class="cs-lbl">Pláticas registradas</span><span class="cs-val v-green">${plat}</span></div>
+      <div class="coord-stat"><span class="cs-lbl">Sin plática</span><span class="cs-val ${sin>0?'v-red':''}">${sin}</span></div>
+    </div>`;
+  }).join('');
+
+  show('loading-resumen', false);
+  show('content-resumen', true);
+}
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+function citySplitHTML(gdl, cdmx, label1, label2) {
+  return `<div class="city-box"><h3>🏙 Guadalajara — GDL</h3>
+    <div class="city-row"><span class="cr-lbl">${label1}</span><span class="cr-val">${gdl.pv||gdl.ok||0}</span></div>
+    <div class="city-row"><span class="cr-lbl">${label2}</span><span class="cr-val">${gdl.cap||gdl.sin||0}</span></div>
+  </div>
+  <div class="city-box"><h3>🏙 Ciudad de México — CDMX</h3>
+    <div class="city-row"><span class="cr-lbl">${label1}</span><span class="cr-val">${cdmx.pv||cdmx.ok||0}</span></div>
+    <div class="city-row"><span class="cr-lbl">${label2}</span><span class="cr-val">${cdmx.cap||cdmx.sin||0}</span></div>
+  </div>`;
+}
+
+function set(id, val) { const el=document.getElementById(id); if(el) el.textContent=val; }
+function show(id, visible) { const el=document.getElementById(id); if(el) el.style.display=visible?'block':'none'; }
+
+function showTab(id) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-'+id).classList.add('active');
+  document.getElementById('panel-'+id).classList.add('active');
+}
+
+// Auto-load sheet IT on page load
+window.addEventListener('load', () => { initFilters(); loadSheetIT(); });
+</script>
+</body>
+</html>
