@@ -1472,20 +1472,40 @@ async function autoLoadFromGitHub() {
   const status = document.getElementById('load-status');
   status.textContent = 'Cargando datos...';
 
+  // Intentar primero con URL relativa (funciona en GitHub Pages),
+  // si falla usar la URL absoluta de raw.githubusercontent.com
+  const REPO_RAW = 'https://raw.githubusercontent.com/motero-fertilidad/auditoria-coordinadoras-experiencia/main/datos.xlsx';
+  const urls = ['datos.xlsx?' + Date.now(), REPO_RAW];
+
+  let buffer = null;
+  let lastErr = null;
+  for (const url of urls) {
+    try {
+      const res = await fetch(url, {cache: 'no-cache'});
+      if (!res.ok) throw new Error(`HTTP ${res.status} en ${url}`);
+      buffer = await res.arrayBuffer();
+      console.log('datos.xlsx cargado desde:', url);
+      break;
+    } catch(e) {
+      lastErr = e;
+      console.warn('Falló fetch desde:', url, e.message);
+    }
+  }
+
+  if (!buffer) {
+    console.error('No se pudo cargar datos.xlsx:', lastErr?.message);
+    document.getElementById('week-badge').textContent = 'Sin datos';
+    status.textContent = 'Carga los archivos manualmente';
+    return;
+  }
+
   try {
-    const res = await fetch('datos.xlsx', {cache: 'no-cache'});
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const buffer = await res.arrayBuffer();
     const wb = XLSX.read(new Uint8Array(buffer), {type:'array', cellDates:true});
 
     let loaded = 0;
     wb.SheetNames.forEach(name => {
       const key = name.toLowerCase().trim();
       const ws = wb.Sheets[name];
-      // La hoja "Experiencia" dentro de datos.xlsx ya trae los headers en la
-      // primera fila (a diferencia del Excel descargado a mano del Google
-      // Sheet, que sí trae una fila de metadatos arriba). Por eso aquí NO
-      // usamos range:1.
       const rows = XLSX.utils.sheet_to_json(ws, {defval:''});
 
       if (key === 'citas_gdl') {
@@ -1516,7 +1536,7 @@ async function autoLoadFromGitHub() {
     if (state.sheetIT) renderExperiencia();
 
   } catch(err) {
-    console.warn('No se pudo cargar Auditoria Experiencia.xlsx:', err.message);
+    console.error('Error procesando datos.xlsx:', err.message);
     document.getElementById('week-badge').textContent = 'Sin datos';
     status.textContent = 'Carga los archivos manualmente';
   }
