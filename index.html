@@ -540,6 +540,10 @@ function filterByCoord(rows, panel) {
   return rows.filter(r => getCoord(r, getCiudad(r)) === value);
 }
 
+function normProf(p) {
+  return (p||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+}
+
 // Mapa de Usuario Alta (RFC + nombre) → coordinadora.
 // Se usa como fallback cuando Profesional Historia no resuelve a ninguna
 // doctora del mapa (ej. donaciones, donde el profesional es la coord de donantes).
