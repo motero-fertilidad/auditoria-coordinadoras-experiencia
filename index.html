@@ -761,6 +761,22 @@ function isExternal(row) {
 // City: comes from which file the row belongs to (set via row.__ciudad__)
 // If not set, fallback to profesional list
 function getCiudad(row) {
+  // Para "Captura ovular" a veces el registro queda en el archivo de citas de
+  // otra sede (ej. capturas de la Dra. Nolazco —Metepec— registradas en el
+  // archivo de CDMX porque el procedimiento se hizo en un quirófano
+  // compartido). La sede real de una captura depende de a qué roster de
+  // doctoras pertenece "Profesional Historia", no del archivo de origen —
+  // así que para este concepto esa comprobación tiene prioridad sobre
+  // "__ciudad__". Si la doctora no está en ningún roster conocido, se cae de
+  // vuelta al comportamiento normal (archivo de origen / "Profesional").
+  if (isCaptura(row['Concepto'])) {
+    const profHist = normProf(row['Profesional Historia'] || row['Profesional'] || '');
+    if (profHist) {
+      if (Object.keys(DOCTOR_COORD_MET).some(d => profHist.includes(normProf(d)))) return 'MET';
+      if (Object.keys(DOCTOR_COORD_GDL).some(d => profHist.includes(normProf(d)))) return 'GDL';
+      if (Object.keys(DOCTOR_COORD_CDMX).some(d => profHist.includes(normProf(d)))) return 'CDMX';
+    }
+  }
   if (row.__ciudad__) return row.__ciudad__;
   const prof = normProf(row['Profesional'] || '');
   if (PROF_GDL.some(p => prof.includes(normProf(p)))) return 'GDL';
