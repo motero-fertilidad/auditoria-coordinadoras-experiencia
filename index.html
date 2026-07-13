@@ -1382,7 +1382,7 @@ function renderPlatica() {
   const platicaRows = rows.filter(r => isPlatica(r['Concepto']) && r['Estado'] !== 'Anulada');
   const platicaNames = new Set(platicaRows.map(r => normName(r['Apellidos, Nombre'])));
 
-  const results = conEstudio.map(r => {
+  const resultsBase = conEstudio.map(r => {
     const name = normName(r['Apellidos, Nombre']);
     const obs = String(r['Obs.']==null ? '' : r['Obs.']);
     const enConsulta = isEnConsulta(obs);
@@ -1401,6 +1401,29 @@ function renderPlatica() {
 
     return { ...r, name, status, coord, c, fechaStr, dias, obs };
   });
+
+  // Pacientes con una plática de resultados registrada esta semana cuya
+  // "primera vez con estudio" no aparece en este mismo archivo de citas (ej.
+  // su primera vez fue en un periodo anterior, fuera de este export). Sin
+  // esto, su plática desaparecía por completo del tablero de su
+  // coordinadora aunque sí esté registrada en Vrepro — se agregan como
+  // "completa" adicional, sin duplicar a quienes ya están en resultsBase.
+  const namesInResultsBase = new Set(resultsBase.map(r => r.name));
+  const extraCompletaNames = new Set();
+  const extraCompleta = [];
+  platicaRows.forEach(r => {
+    const name = normName(r['Apellidos, Nombre']);
+    if (namesInResultsBase.has(name) || extraCompletaNames.has(name)) return;
+    const coord = getCoord(r, getCiudad(r));
+    if (coordFilter && coord !== coordFilter) return;
+    extraCompletaNames.add(name);
+    extraCompleta.push({
+      ...r, name, status: 'completa', coord, c: getCiudad(r),
+      fechaStr: fmtDate(r['Fecha']), dias: null, obs: ''
+    });
+  });
+
+  const results = [...resultsBase, ...extraCompleta];
 
   const sinPlatica = results.filter(r=>r.status==='sin_platica');
   const completa = results.filter(r=>r.status==='completa');
