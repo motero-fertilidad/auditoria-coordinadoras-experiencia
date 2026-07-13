@@ -339,7 +339,20 @@
       <div class="sec-head"><div class="sec-title">Por coordinadora · cumplimiento del expediente</div></div>
       <div class="coord-grid" id="coord-grid-exp"></div>
     </div>
-    <div class="section">
+    <div class="section" style="margin-top:20px;">
+      <div class="sec-head"><div class="sec-title">Incidencias operativas de citas</div><span class="pill pill-amber" id="pill-incidencias"></span></div>
+      <p style="font-size:12px;color:var(--muted);margin:-4px 0 10px;">Citas (sin contar Gestión Administrativa) que quedaron en No Asiste, Reasignada o Anulada — también es experiencia del paciente.</p>
+      <div class="kpi-grid" style="margin-bottom:14px;">
+        <div class="kpi-card k-red"><div class="kpi-label">No asiste</div><div class="kpi-num" id="e-noasiste">—</div></div>
+        <div class="kpi-card k-amber"><div class="kpi-label">Reasignada</div><div class="kpi-num" id="e-reasignada">—</div></div>
+        <div class="kpi-card k-neutral"><div class="kpi-label">Anulada</div><div class="kpi-num" id="e-anulada">—</div></div>
+      </div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Fecha</th><th>Paciente</th><th>Ciudad</th><th>Tipo de cita</th><th>Coordinadora</th><th>Estado</th></tr></thead>
+        <tbody id="tbody-incidencias"></tbody>
+      </table></div>
+    </div>
+    <div class="section" style="margin-top:20px;">
       <div class="sec-head"><div class="sec-title">Pacientes con expediente incompleto</div><span class="pill pill-red" id="pill-incompleto"></span></div>
       <div class="tbl-wrap"><table>
         <thead><tr><th>Paciente</th><th>Coordinadora</th><th>Demog</th><th>Contacto</th><th>CP</th><th>Clasificación</th><th>Factura</th><th>Observaciones</th></tr></thead>
@@ -680,6 +693,12 @@ const CAPTURA_CONCEPTS = ['captura ovular'];
 // Gine is now included in PV_CONCEPTS — keep for study detection
 const GINE_CONCEPTS = ['check up ginecologico', 'check up ginecológico', 'check-up ginecologico', 'check-up ginecológico'];
 const PLATICA_CONCEPTS = ['plática de resultados', 'platica de resultados'];
+// Citas de gestión administrativa (llamadas, trámites) — no cuentan como
+// incidencia operativa aunque queden en No Asiste/Reasignada/Anulada.
+const ADMIN_CONCEPTS = ['gestion administrativa', 'gestión administrativa'];
+function isAdmin(concepto) { return ADMIN_CONCEPTS.some(k => (concepto||'').toLowerCase().includes(k)); }
+// Estados de cita que representan una incidencia operativa (no llegó a Terminada).
+const INCIDENCIA_ESTADOS = ['No Asiste', 'Reasignada', 'Anulada'];
 const ADDON_HAM = ['antimulleriana amh', 'antimülleriana amh', 'hormona antimülleriana'];
 const ADDON_PAP = ['papanicolaou'];
 const ADDON_DONACION = ['óvulos fi', 'ovulos fi', 'esperma fi'];
@@ -722,8 +741,14 @@ const PROF_MET = ['guadalupe nolazco'];
 const ALL_INTERNAL_PROF = [...PROF_GDL, ...PROF_CDMX, ...PROF_MET];
 
 // Returns true if the row should be EXCLUDED
+// Para "Captura ovular", el campo "Profesional" suele venir con el equipo de
+// laboratorio (ej. "Laboratorio FIV/Andrología") que realizó el procedimiento
+// ese día, no con la doctora tratante — eso hacía que capturas internas se
+// marcaran como "externas" y se perdieran del conteo. La doctora tratante real
+// está en "Profesional Historia" (mismo criterio que usa getCoord()).
 function isExternal(row) {
-  const prof = normProf(row['Profesional'] || '');
+  const profField = isCaptura(row['Concepto']) ? 'Profesional Historia' : 'Profesional';
+  const prof = normProf(row[profField] || '');
   if (!prof) return true;
   return !ALL_INTERNAL_PROF.some(p => prof.includes(normProf(p)));
 }
@@ -890,7 +915,7 @@ function renderAll() {
     renderConversion();
     renderPlatica();
   }
-  if (state.sheetIT) renderExperiencia();
+  if (state.sheetIT || state.citas) renderExperiencia();
   if (state.cargos) renderAddons();
   if (state.citas || state.cargos) renderResumen();
 }
@@ -1164,7 +1189,65 @@ function renderAddons() {
   show('content-addons', true);
 }
 
+// Incidencias operativas de citas (No Asiste / Reasignada / Anulada) — viene
+// de state.citas, no del sheet IT, así que se calcula y pinta aparte para que
+// funcione aunque el sheet de Experiencia todavía no se haya cargado.
+function renderExperienciaIncidencias() {
+  if (!state.citas) return;
+  const coordFilter = activeFilters['experiencia'];
+
+  const base = state.citas.filter(r =>
+    INCIDENCIA_ESTADOS.includes(r['Estado']) &&
+    !isAdmin(r['Concepto']) &&
+    !isExternal(r)
+  );
+  const filtered = coordFilter
+    ? base.filter(r => getCoord(r, getCiudad(r)) === coordFilter)
+    : base;
+
+  const noAsiste = filtered.filter(r => r['Estado'] === 'No Asiste');
+  const reasignada = filtered.filter(r => r['Estado'] === 'Reasignada');
+  const anulada = filtered.filter(r => r['Estado'] === 'Anulada');
+
+  set('e-noasiste', noAsiste.length);
+  set('e-reasignada', reasignada.length);
+  set('e-anulada', anulada.length);
+  const pillIncidencias = document.getElementById('pill-incidencias');
+  if (pillIncidencias) pillIncidencias.textContent = filtered.length + ' citas';
+
+  const estadoBadge = (estado) =>
+    estado === 'No Asiste' ? `<span class="badge b-red">No asiste</span>` :
+    estado === 'Reasignada' ? `<span class="badge b-amber">Reasignada</span>` :
+    `<span class="badge b-grey">Anulada</span>`;
+
+  const tbody = document.getElementById('tbody-incidencias');
+  if (tbody) {
+    tbody.innerHTML = filtered.length === 0
+      ? '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px;">Sin incidencias esta semana ✔</td></tr>'
+      : filtered
+          .slice()
+          .sort((a,b) => (new Date(b['Fecha']) - new Date(a['Fecha'])) || 0)
+          .map(r => {
+            const c = getCiudad(r);
+            const coord = getCoord(r, c);
+            return `<tr>
+              <td class="td-muted">${fmtDate(r['Fecha'])}</td>
+              <td class="td-name">${r['Apellidos, Nombre']||'—'}</td>
+              <td><span class="tag tag-${c.toLowerCase()}">${c}</span></td>
+              <td class="td-muted">${r['Concepto']||'—'}</td>
+              <td>${coord?`<span class="badge b-teal">${coord}</span>`:'<span class="td-muted">—</span>'}</td>
+              <td>${estadoBadge(r['Estado'])}</td>
+            </tr>`;
+          }).join('');
+  }
+}
+
 function renderExperiencia() {
+  renderExperienciaIncidencias();
+  if (state.citas || state.sheetIT) {
+    show('loading-experiencia', false);
+    show('content-experiencia', true);
+  }
   if (!state.sheetIT) return;
   const rows = state.sheetIT;
   const coordFilter = activeFilters['experiencia'];
@@ -1577,7 +1660,7 @@ async function autoLoadFromGitHub() {
 
     status.textContent = `${loaded} hojas cargadas`;
     renderAll();
-    if (state.sheetIT) renderExperiencia();
+    if (state.sheetIT || state.citas) renderExperiencia();
 
   } catch(err) {
     console.error('Error procesando datos.xlsx:', err.message);
@@ -1736,7 +1819,7 @@ function renderAll() {
   if (state.citas && state.citas.length > 0) updateWeekBadge(state.citas);
   renderResumen();
   if (state.citas) { renderConversion(); renderPlatica(); }
-  if (state.sheetIT) renderExperiencia();
+  if (state.sheetIT || state.citas) renderExperiencia();
   if (state.cargos) renderAddons();
 }
 
