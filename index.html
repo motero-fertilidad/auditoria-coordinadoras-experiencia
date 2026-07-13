@@ -765,6 +765,11 @@ function getCiudad(row) {
 }
 
 function isPV(concepto) { const c = (concepto||'').toLowerCase(); return PV_CONCEPTS.some(p => c.includes(p)); }
+// Para conteos de "primera vez": solo cuentan citas que sí llegaron a pasar
+// (Terminada) o que el paciente no llegó (No Asiste). Una Reasignada no
+// representa una primera vez real de esta semana — se reprogramó para otro
+// día — así que se excluye de estos conteos generales.
+function isPVCountable(estado) { return estado === 'Terminada' || estado === 'No Asiste'; }
 function isCaptura(concepto) { return CAPTURA_CONCEPTS.some(p => (concepto||'').toLowerCase().includes(p)); }
 function isGine(concepto) { return GINE_CONCEPTS.some(p => (concepto||'').toLowerCase().includes(p)); }
 function isPlatica(concepto) { return PLATICA_CONCEPTS.some(p => (concepto||'').toLowerCase().includes(p)); }
@@ -938,9 +943,14 @@ function splitCSVLine(line) {
 // ─── CONVERSION ───────────────────────────────────────────────────────────────
 function renderConversion() {
   const rows = state.citas;
-  const allPV = rows.filter(r => isPV(r['Concepto']) && r['Estado'] !== 'Anulada' && !isExternal(r));
+  // "Primeras veces" y la tasa de conversión solo cuentan citas Terminada —
+  // una cita reasignada o donde el paciente no asistió no debe inflar (ni
+  // deflactar) el denominador de conversión. No asistencias se calcula aparte.
+  const allPV = rows.filter(r => isPV(r['Concepto']) && r['Estado'] === 'Terminada' && !isExternal(r));
+  const allNoAsiste = rows.filter(r => isPV(r['Concepto']) && r['Estado'] === 'No Asiste' && !isExternal(r));
   const allCap = rows.filter(r => isCaptura(r['Concepto']) && r['Estado'] === 'Terminada' && !isExternal(r));
   const pvRows = filterByCoord(allPV, 'conversion');
+  const noAsisteRows = filterByCoord(allNoAsiste, 'conversion');
   const capSeen = new Set();
   const capRows = filterByCoord(allCap, 'conversion').filter(r => {
     const key = (r['Apellidos, Nombre']||'').trim().toLowerCase();
@@ -948,7 +958,7 @@ function renderConversion() {
     capSeen.add(key);
     return true;
   });
-  const noAsiste = pvRows.filter(r => r['Estado'] === 'No Asiste').length;
+  const noAsiste = noAsisteRows.length;
   const rate = pvRows.length > 0 ? Math.round(capRows.length/pvRows.length*100) : 0;
 
   set('c-pv', pvRows.length);
@@ -969,10 +979,15 @@ function renderConversion() {
     const groupCoords = new Set(group.coords);
     const gPV  = pvRows.filter(r => groupCoords.has(getCoord(r, getCiudad(r))));
     const gCap = capRows.filter(r => groupCoords.has(getCoord(r, getCiudad(r))));
-    const gNoA = gPV.filter(r => r['Estado'] === 'No Asiste').length;
+    const gNoARows = noAsisteRows.filter(r => groupCoords.has(getCoord(r, getCiudad(r))));
+    const gNoA = gNoARows.length;
     const gRate = gPV.length > 0 ? Math.round(gCap.length/gPV.length*100) : 0;
+    // La tabla de detalle sí muestra Terminadas + No Asiste juntas (con su
+    // badge de estado) para no perder visibilidad de los no-shows, aunque el
+    // conteo/tasa de arriba solo considere Terminadas.
+    const gPVDetailRows = [...gPV, ...gNoARows].sort((a,b) => (new Date(a['Fecha']) - new Date(b['Fecha'])) || 0);
 
-    const pvDetail = gPV.map(r => {
+    const pvDetail = gPVDetailRows.map(r => {
       const estado = r['Estado']||'';
       const estadoBadge = estado==='Terminada' ? `<span class="badge b-green">Terminada</span>`
         : estado==='No Asiste' ? `<span class="badge b-red">No asiste</span>`
@@ -1003,7 +1018,7 @@ function renderConversion() {
         <span style="font-size:12px;color:var(--muted);">${gPV.length} PV · ${gCap.length} capturas · <strong style="color:${gRate>=30?'var(--green-mid)':gRate>=15?'var(--amber)':'var(--red)'};">${gRate}%</strong> conversión · ${gNoA} no asistencias</span>
       </div>
       <details style="margin-bottom:6px;">
-        <summary style="font-size:11.5px;font-weight:600;color:var(--muted);cursor:pointer;padding:4px 0;">Ver primeras veces (${gPV.length})</summary>
+        <summary style="font-size:11.5px;font-weight:600;color:var(--muted);cursor:pointer;padding:4px 0;">Ver primeras veces (${gPVDetailRows.length})</summary>
         <div class="tbl-wrap" style="margin-top:6px;">
           <table>
             <thead><tr><th>Fecha</th><th>Paciente</th><th>Tipo</th><th>Doctor</th><th>Estado</th></tr></thead>
@@ -1511,7 +1526,7 @@ function renderPlatica() {
 // ─── RESUMEN ──────────────────────────────────────────────────────────────────
 function renderResumen() {
   const citas = state.citas || [];
-  const pvRows = citas.filter(r => isPV(r['Concepto']) && r['Estado'] !== 'Anulada' && !isExternal(r));
+  const pvRows = citas.filter(r => isPV(r['Concepto']) && isPVCountable(r['Estado']) && !isExternal(r));
   const capSeen2 = new Set();
   const capRows = citas.filter(r => isCaptura(r['Concepto']) && r['Estado'] === 'Terminada' && !isExternal(r)).filter(r => {
     const key = (r['Apellidos, Nombre']||'').trim().toLowerCase();
@@ -1549,7 +1564,7 @@ function renderResumen() {
     const c = getCiudad(r);
     const coord = getCoord(r, c);
     if (!coord || !byCoord[coord]) return;
-    if (isPV(r['Concepto']) && r['Estado']!=='Anulada' && !isExternal(r)) byCoord[coord].pv++;
+    if (isPV(r['Concepto']) && isPVCountable(r['Estado']) && !isExternal(r)) byCoord[coord].pv++;
     if (isPlatica(r['Concepto']) && r['Estado']!=='Anulada') byCoord[coord].plat++;
   });
   sinPlatica.forEach(r => {
