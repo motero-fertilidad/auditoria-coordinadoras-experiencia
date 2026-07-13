@@ -771,6 +771,10 @@ function isPV(concepto) { const c = (concepto||'').toLowerCase(); return PV_CONC
 // día — así que se excluye de estos conteos generales.
 function isPVCountable(estado) { return estado === 'Terminada' || estado === 'No Asiste'; }
 function isCaptura(concepto) { return CAPTURA_CONCEPTS.some(p => (concepto||'').toLowerCase().includes(p)); }
+// Capturas ovulares marcadas "(EX)" en Obs. son excepciones/externas que no
+// deben contarse (ej. la doctora la registró pero la captura real fue en otro
+// lado, o es un caso especial marcado manualmente). Aplica sin importar mayúsculas.
+function isCapturaExcepcion(obs) { return String(obs==null?'':obs).toLowerCase().includes('(ex)'); }
 function isGine(concepto) { return GINE_CONCEPTS.some(p => (concepto||'').toLowerCase().includes(p)); }
 function isPlatica(concepto) { return PLATICA_CONCEPTS.some(p => (concepto||'').toLowerCase().includes(p)); }
 function hasStudy(concepto, obs) {
@@ -948,7 +952,7 @@ function renderConversion() {
   // deflactar) el denominador de conversión. No asistencias se calcula aparte.
   const allPV = rows.filter(r => isPV(r['Concepto']) && r['Estado'] === 'Terminada' && !isExternal(r));
   const allNoAsiste = rows.filter(r => isPV(r['Concepto']) && r['Estado'] === 'No Asiste' && !isExternal(r));
-  const allCap = rows.filter(r => isCaptura(r['Concepto']) && r['Estado'] === 'Terminada' && !isExternal(r));
+  const allCap = rows.filter(r => isCaptura(r['Concepto']) && r['Estado'] === 'Terminada' && !isExternal(r) && !isCapturaExcepcion(r['Obs.']));
   const pvRows = filterByCoord(allPV, 'conversion');
   const noAsisteRows = filterByCoord(allNoAsiste, 'conversion');
   const capSeen = new Set();
@@ -1528,7 +1532,7 @@ function renderResumen() {
   const citas = state.citas || [];
   const pvRows = citas.filter(r => isPV(r['Concepto']) && isPVCountable(r['Estado']) && !isExternal(r));
   const capSeen2 = new Set();
-  const capRows = citas.filter(r => isCaptura(r['Concepto']) && r['Estado'] === 'Terminada' && !isExternal(r)).filter(r => {
+  const capRows = citas.filter(r => isCaptura(r['Concepto']) && r['Estado'] === 'Terminada' && !isExternal(r) && !isCapturaExcepcion(r['Obs.'])).filter(r => {
     const key = (r['Apellidos, Nombre']||'').trim().toLowerCase();
     if (!key || capSeen2.has(key)) return false;
     capSeen2.add(key);
