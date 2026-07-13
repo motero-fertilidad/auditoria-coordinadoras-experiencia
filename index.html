@@ -718,7 +718,9 @@ function isAddonExcepcion(text) { return /\(ex\)/i.test(String(text||'')); }
 const STUDY_KEYWORDS = ['ham','amh','antimül','antimul','hormona anti','tomar ham','tomar amh','espermatobioscopia','espermatobioscopía'];
 const EN_CONSULTA_KW = ['interpretaron','se entregan durante','se le dieron resultados','se interpretaron',
   'toma de estudios previos','entrega de resultados en consulta','entrega de resultados','resultados en consulta',
-  'resultados entregados en consulta','se entregaron los resultados en consulta','estudios previos entregados'];
+  'resultados entregados en consulta','se entregaron los resultados en consulta','estudios previos entregados',
+  'se le dio el resultado','se le dio su resultado','resultado de su ham en la consulta',
+  'no tiene platica de resultados agendada','no tiene plática de resultados agendada'];
 // Casos en los que la plática de resultados NO aplica todavía por una razón
 // válida (no es que falte hacerse, es que se hará más adelante o ya no aplica):
 // se refirió a la paciente con otro doctor, no le interesa continuar, o se
