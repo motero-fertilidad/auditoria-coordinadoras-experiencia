@@ -566,6 +566,21 @@ function coordFromUsuarioAlta(raw) {
   return null;
 }
 
+// Busca al doctor (Profesional/Profesional Historia) en el mapa combinado de
+// TODAS las ciudades, sin depender de la ciudad detectada por el campo
+// "Entidad" del cargo (que a veces no coincide con la sede real del doctor).
+// Esto evita asignaciones incorrectas por Usuario Alta cuando el doctor sí es
+// identificable directamente.
+function coordFromProfAnyCity(profRaw) {
+  const prof = normProf(profRaw || '');
+  if (!prof) return null;
+  const allDoctors = {...DOCTOR_COORD_GDL, ...DOCTOR_COORD_CDMX, ...DOCTOR_COORD_MET};
+  for (const [doctor, coord] of Object.entries(allDoctors)) {
+    if (prof.includes(normProf(doctor))) return coord;
+  }
+  return null;
+}
+
 // Get coordinator from doctor name + city
 function getCoord(row, cityOverride) {
   // Para "Captura ovular", el campo "Profesional" suele ser quien realizó el
@@ -669,6 +684,13 @@ const ADDON_HAM = ['antimulleriana amh', 'antimülleriana amh', 'hormona antimü
 const ADDON_PAP = ['papanicolaou'];
 const ADDON_DONACION = ['óvulos fi', 'ovulos fi', 'esperma fi'];
 const ADDON_VITRI = ['[ex] vitrificación', '[ex] vitrificacion', 'vitrificación de ovocitos'];
+// Cuando el Check up Ginecológico se vendió en combo con Fertilidad, el HAM/AMH
+// ya viene incluido en el precio del combo — no debe contarse como add-on aparte.
+const GINE_FERTILIDAD_KW = ['gine + fertilidad', 'gine+fertilidad', 'gine y fertilidad',
+  'ginecologico + fertilidad', 'ginecológico + fertilidad', 'gine + fert', 'con ham gratis', 'ham gratis'];
+// Usuario que captura renovaciones/almacenamientos administrativos — esos cargos
+// no deben contarse como add-on generado por una coordinadora de experiencia.
+const ALMACEN_EXCLUDE_USUARIO = ['aocf9805194ua'];
 const STUDY_KEYWORDS = ['ham','amh','antimül','antimul','hormona anti','tomar ham','tomar amh','espermatobioscopia','espermatobioscopía'];
 const EN_CONSULTA_KW = ['interpretaron','se entregan durante','se le dieron resultados','se interpretaron',
   'toma de estudios previos','entrega de resultados en consulta','entrega de resultados','resultados en consulta',
@@ -729,6 +751,31 @@ function hasStudy(concepto, obs) {
   return false;
 }
 function isEnConsulta(obs) { const o=String(obs==null?'':obs).toLowerCase(); return EN_CONSULTA_KW.some(k=>o.includes(k)); }
+
+// Convierte montos en formato es-MX ("1.300,00" -> 1300, punto=miles, coma=decimales)
+// a un Number utilizable. Acepta también valores ya numéricos.
+function parseMonto(v) {
+  if (v == null || v === '') return 0;
+  if (typeof v === 'number') return v;
+  let s = String(v).trim();
+  if (!s) return 0;
+  s = s.replace(/\./g, '').replace(',', '.');
+  const n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
+}
+
+// Revisa si el check up ginecológico del paciente fue vendido en combo con
+// Fertilidad (o con "HAM gratis") — en ese caso el HAM ya está incluido en el
+// precio y no debe contarse como add-on aparte.
+function hasGineFertilidadCombo(pname) {
+  const citasRows = (state.citas || []).filter(r =>
+    normName(r['Apellidos, Nombre']) === pname && isGine(r['Concepto'])
+  );
+  return citasRows.some(r => {
+    const o = String(r['Obs.'] == null ? '' : r['Obs.']).toLowerCase();
+    return GINE_FERTILIDAD_KW.some(k => o.includes(k));
+  });
+}
 function normName(n) { return (n||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
 function fmtDate(d) {
   if (!d) return '—';
@@ -975,15 +1022,22 @@ function renderAddons() {
     const name = r['Historia']||'—';
     const fecha = fmtDate(r['F. Cargo']);
     const c = ciudad(r['Entidad']||'');
-    const monto = r['Tt Venta + IVA'] || r['Total Venta'] || 0;
-    const montoNum = parseFloat(String(monto).replace(/,/g,'')) || 0;
+    const montoNum = parseMonto(r['Tt Venta + IVA'] || r['Total Venta'] || 0);
+    const monto = montoNum;
     const uds = parseFloat(r['Uds']||1);
     const profHist = r['Profesional Historia'] || r['Profesional'] || '';
+    const usuarioAlta = r['Usuario Alta'] || '';
     if (uds < 0) return; // refunds
     if (montoNum === 0) return; // gratis — no cuenta como add-on
+    // Almacenamientos capturados por el usuario administrativo de renovaciones
+    // no cuentan como add-on generado por una coordinadora de experiencia.
+    if (concepto.includes('almacenamiento') &&
+        ALMACEN_EXCLUDE_USUARIO.some(u => normProf(usuarioAlta).includes(u))) {
+      return;
+    }
 
     // Helper para push con profHist incluido
-    const push = (obj) => addons.push({...obj, _profHist: profHist, _usuarioAlta: r['Usuario Alta']||''});
+    const push = (obj) => addons.push({...obj, _profHist: profHist, _usuarioAlta: usuarioAlta});
 
     if (ADDON_DONACION.some(k=>combined.includes(k))) {
       push({fecha,paciente:name,ciudad:c,addon:r['Nombre Prod.']||r['Concepto'],cat:'Donación de gametos',monto,coord:null});
@@ -996,7 +1050,8 @@ function renderAddons() {
       const pname = normName(name);
       const patRows = byPatient[pname]||[];
       const hadGine = patRows.some(pr => isGine(pr['Concepto']));
-      if (hadGine) {
+      const comboIncluyeHAM = hasGineFertilidadCombo(pname);
+      if (hadGine && !comboIncluyeHAM) {
         push({fecha,paciente:name,ciudad:c,addon:'HAM en Check up Ginecológico',cat:'HAM en Gine',monto,coord:null});
       }
     } else if (ADDON_PAP.some(k=>combined.includes(k))) {
@@ -1048,9 +1103,11 @@ function renderAddons() {
     });
   }
   addons.forEach(a => {
-    // 1) Profesional Historia del cargo → mapa de doctores
+    // 1) Profesional Historia del cargo → mapa de doctores de CUALQUIER ciudad
+    //    (no depende del campo "Entidad", que a veces no coincide con la sede
+    //    real de la doctora y provocaba caer al fallback de Usuario Alta).
     if (a._profHist) {
-      const coord = getCoord({'Profesional': a._profHist}, a.ciudad);
+      const coord = coordFromProfAnyCity(a._profHist);
       if (coord) { a.coord = coord; return; }
     }
     // 2) Usuario Alta del cargo → mapa directo de coordinadoras
