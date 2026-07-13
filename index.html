@@ -710,6 +710,11 @@ const GINE_FERTILIDAD_KW = ['gine + fertilidad', 'gine+fertilidad', 'gine y fert
 // Usuario que captura renovaciones/almacenamientos administrativos — esos cargos
 // no deben contarse como add-on generado por una coordinadora de experiencia.
 const ALMACEN_EXCLUDE_USUARIO = ['aocf9805194ua'];
+// Cargos marcados "(EX)" con paréntesis (ej. "(EX) EmbryoScope Kit") son
+// excepciones que no deben contarse como add-on. Ojo: esto es distinto de
+// "[EX]" con corchetes (ej. "[EX] Vitrificación"), que sí es una categoría
+// de add-on válida y no debe excluirse.
+function isAddonExcepcion(text) { return /\(ex\)/i.test(String(text||'')); }
 const STUDY_KEYWORDS = ['ham','amh','antimül','antimul','hormona anti','tomar ham','tomar amh','espermatobioscopia','espermatobioscopía'];
 const EN_CONSULTA_KW = ['interpretaron','se entregan durante','se le dieron resultados','se interpretaron',
   'toma de estudios previos','entrega de resultados en consulta','entrega de resultados','resultados en consulta',
@@ -1077,6 +1082,10 @@ function renderAddons() {
     // no cuentan como add-on generado por una coordinadora de experiencia.
     if (concepto.includes('almacenamiento') &&
         ALMACEN_EXCLUDE_USUARIO.some(u => normProf(usuarioAlta).includes(u))) {
+      return;
+    }
+    // Cargo marcado como excepción "(EX)" — no cuenta como add-on.
+    if (isAddonExcepcion(r['Concepto']) || isAddonExcepcion(r['Nombre Prod.'])) {
       return;
     }
 
