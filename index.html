@@ -475,6 +475,15 @@ function matchCoordAlias(text) {
   return null;
 }
 
+// Sede (label de CLINIC_GROUPS) a la que pertenece una coordinadora — se usa
+// para desempatar cuando dos coordinadoras de la MISMA sede comparten una
+// sola doctora (ej. Alondra y Yanelli comparten a la Dra. Nolazco en
+// Metepec): el doctor por sí solo no distingue entre ellas.
+function coordClinicGroup(coord) {
+  const g = CLINIC_GROUPS.find(g => g.coords.includes(coord));
+  return g ? g.label : null;
+}
+
 // activeFilters: conversion stores a clinic label (or null), others store a coord name (or null)
 const activeFilters = { conversion: null, addons: null, experiencia: null, platica: null };
 
@@ -552,6 +561,7 @@ const USUARIO_ALTA_MAP = {
   'aranza fuentes':                   'Lucy',
   'judith guadalupe ontiveros diaz':  'Sharon',
   'brenda sanchez':                   'Andrea',
+  'yanelli garcia':                   'Yanelli',
   // Margarita Muñoz y Job Grimaldo son admin/operaciones, no coordinadoras
 };
 
@@ -596,8 +606,9 @@ function getCoord(row, cityOverride) {
 
   // 1) Coincidencia directa por doctor@ tratante en el campo de profesional
   //    de la ciudad correspondiente.
+  let coordFromDoctor = null;
   for (const [doctor, coord] of Object.entries(map)) {
-    if (prof.includes(normProf(doctor))) return coord;
+    if (prof.includes(normProf(doctor))) { coordFromDoctor = coord; break; }
   }
 
   // 2) El nombre completo de alguna doctora (de cualquier ciudad) puede
@@ -606,10 +617,11 @@ function getCoord(row, cityOverride) {
   //    más específico (evita, ej., confundir a "Miranda Lucía Morán
   //    Morales" —doctora de Andrea— con la coordinadora "Lucy").
   const usuario = normProf(row['Usuario Crea'] || '');
+  let coordFromUsuarioDoctor = null;
   if (usuario) {
     const allDoctors = {...DOCTOR_COORD_GDL, ...DOCTOR_COORD_CDMX, ...DOCTOR_COORD_MET};
     for (const [doctor, coord] of Object.entries(allDoctors)) {
-      if (usuario.includes(normProf(doctor))) return coord;
+      if (usuario.includes(normProf(doctor))) { coordFromUsuarioDoctor = coord; break; }
     }
   }
 
@@ -617,12 +629,24 @@ function getCoord(row, cityOverride) {
   //    -> cubre casos donde ella realizó el procedimiento directamente
   //    (ej. un cargo con "Profesional Historia: Leslie Sharon Gamiño Sanchez").
   const profAlias = matchCoordAlias(prof);
-  if (profAlias) return profAlias;
 
   // 4) Alias corto de la coordinadora en "Usuario Crea" -> cubre citas o
   //    cargos que ella generó pero que atendió otro profesional (enfermería,
   //    laboratorio, etc.), que es el caso más común de add-ons "huérfanos".
   const usuarioAlias = matchCoordAlias(usuario);
+
+  // Desempate: si dos coordinadoras de la MISMA sede comparten una sola
+  // doctora (ej. Alondra y Yanelli con la Dra. Nolazco en Metepec), el
+  // doctor no alcanza para distinguirlas — en ese caso, quien generó el
+  // registro (alias corto en Usuario Crea) es más específico y gana.
+  if (usuarioAlias && coordFromDoctor && usuarioAlias !== coordFromDoctor &&
+      coordClinicGroup(usuarioAlias) === coordClinicGroup(coordFromDoctor)) {
+    return usuarioAlias;
+  }
+
+  if (coordFromDoctor) return coordFromDoctor;
+  if (coordFromUsuarioDoctor) return coordFromUsuarioDoctor;
+  if (profAlias) return profAlias;
   if (usuarioAlias) return usuarioAlias;
 
   return null;
@@ -1158,15 +1182,21 @@ function renderAddons() {
     // 1) Profesional Historia del cargo → mapa de doctores de CUALQUIER ciudad
     //    (no depende del campo "Entidad", que a veces no coincide con la sede
     //    real de la doctora y provocaba caer al fallback de Usuario Alta).
-    if (a._profHist) {
-      const coord = coordFromProfAnyCity(a._profHist);
-      if (coord) { a.coord = coord; return; }
-    }
+    const coordFromProf = a._profHist ? coordFromProfAnyCity(a._profHist) : null;
     // 2) Usuario Alta del cargo → mapa directo de coordinadoras
-    if (a._usuarioAlta) {
-      const coord = coordFromUsuarioAlta(a._usuarioAlta);
-      if (coord) { a.coord = coord; return; }
+    const coordFromUser = a._usuarioAlta ? coordFromUsuarioAlta(a._usuarioAlta) : null;
+
+    // Desempate: si dos coordinadoras de la MISMA sede comparten una sola
+    // doctora (ej. Alondra y Yanelli con la Dra. Nolazco en Metepec), el
+    // doctor no alcanza para distinguirlas — quien capturó el cargo
+    // (Usuario Alta) es más específico y gana.
+    if (coordFromUser && coordFromProf && coordFromUser !== coordFromProf &&
+        coordClinicGroup(coordFromUser) === coordClinicGroup(coordFromProf)) {
+      a.coord = coordFromUser;
+      return;
     }
+    if (coordFromProf) { a.coord = coordFromProf; return; }
+    if (coordFromUser) { a.coord = coordFromUser; return; }
     // 3) Fallback: cruzar con citas por nombre de paciente
     const citasRows = citasByName[normName(a.paciente)] || [];
     if (citasRows.length > 0) {
