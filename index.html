@@ -365,7 +365,6 @@
       <div class="kpi-card k-neutral"><div class="kpi-label">Primeras veces con estudio</div><div class="kpi-num" id="p-total">—</div><div class="kpi-sub">Requieren plática de resultados</div></div>
       <div class="kpi-card k-green"><div class="kpi-label">Plática registrada</div><div class="kpi-num" id="p-si">—</div><div class="kpi-sub" id="p-si-pct">% del total</div></div>
       <div class="kpi-card k-amber"><div class="kpi-label">Entregados en consulta</div><div class="kpi-num" id="p-enconsulta">—</div><div class="kpi-sub">Sin registro formal en Vrepro</div></div>
-      <div class="kpi-card k-blue"><div class="kpi-label">Pospuesta / no aplica</div><div class="kpi-num" id="p-pospuesta">—</div><div class="kpi-sub">Otro doctor, no interesa, o falta estudios</div></div>
       <div class="kpi-card k-grey"><div class="kpi-label">Paciente no contesta</div><div class="kpi-num" id="p-nocontesta">—</div><div class="kpi-sub">No cuenta en el % — la coordinadora sí gestionó</div></div>
       <div class="kpi-card k-red"><div class="kpi-label">Sin plática registrada</div><div class="kpi-num" id="p-no">—</div><div class="kpi-sub" id="p-no-pct">% del total</div></div>
     </div>
@@ -382,14 +381,6 @@
       <div class="tbl-wrap"><table>
         <thead><tr><th>Fecha</th><th>Paciente</th><th>Ciudad</th><th>Tipo</th><th>Observación</th><th>Notas</th></tr></thead>
         <tbody id="tbody-enconsulta"></tbody>
-      </table></div>
-    </div>
-    <div class="section" style="margin-top:20px;">
-      <div class="sec-head"><div class="sec-title">Pospuesta / no aplica esta semana</div><span class="pill pill-blue" id="pill-pospuesta"></span></div>
-      <p style="font-size:12px;color:var(--muted);margin:-4px 0 10px;">Se mandó con otro doctor, la paciente ya no está interesada, o la plática se dará hasta tener todos los estudios completos.</p>
-      <div class="tbl-wrap"><table>
-        <thead><tr><th>Fecha</th><th>Paciente</th><th>Ciudad</th><th>Tipo</th><th>Observación</th><th>Notas</th></tr></thead>
-        <tbody id="tbody-pospuesta"></tbody>
       </table></div>
     </div>
     <div class="section" style="margin-top:20px;">
@@ -740,21 +731,6 @@ const EN_CONSULTA_KW = ['interpretaron','se entregan durante','se le dieron resu
   'resultados entregados en consulta','se entregaron los resultados en consulta','estudios previos entregados',
   'se le dio el resultado','se le dio su resultado','resultado de su ham en la consulta',
   'no tiene platica de resultados agendada','no tiene plática de resultados agendada'];
-// Casos en los que la plática de resultados NO aplica todavía por una razón
-// válida (no es que falte hacerse, es que se hará más adelante o ya no aplica):
-// se refirió a la paciente con otro doctor, no le interesa continuar, o se
-// hará hasta que tenga todos los estudios completos.
-const POSPUESTA_KW = [
-  'se mando a otro doctor','se mandó a otro doctor','mandado a otro doctor','mandada a otro doctor',
-  'enviado a otro doctor','enviada a otro doctor','se cambio de doctor','se cambió de doctor',
-  'otro doctor','no le interesa','no interesa','ya no le interesa',
-  'se hara despues','se hará después','se hara mas adelante','se hará más adelante',
-  'hasta tener todos los estudios','cuando tenga todos los estudios',
-  'despues de tener todos los estudios','después de tener todos los estudios',
-  'hasta que tenga todos los estudios','faltan estudios','le faltan estudios',
-];
-function isPospuesta(obs) { const o=String(obs==null?'':obs).toLowerCase(); return POSPUESTA_KW.some(k=>o.includes(k)); }
-
 // Paciente no contesta llamadas/mensajes — la coordinadora sí gestionó el
 // seguimiento, así que no debe contar como "sin plática" ni afectar el %
 // de plática registrada (no es un tema de desempeño de la coordinadora).
@@ -1459,7 +1435,6 @@ function renderPlatica() {
     const name = normName(r['Apellidos, Nombre']);
     const obs = String(r['Obs.']==null ? '' : r['Obs.']);
     const enConsulta = isEnConsulta(obs);
-    const pospuesta = isPospuesta(obs);
     const noContesta = isNoContesta(obs);
     const tienePlatica = platicaNames.has(name);
     const coord = getCoord(r, getCiudad(r));
@@ -1470,7 +1445,6 @@ function renderPlatica() {
     let status;
     if (enConsulta) status = 'en_consulta';
     else if (noContesta) status = 'no_contesta';
-    else if (pospuesta) status = 'pospuesta';
     else if (tienePlatica) status = 'completa';
     else status = 'sin_platica';
 
@@ -1503,20 +1477,18 @@ function renderPlatica() {
   const sinPlatica = results.filter(r=>r.status==='sin_platica');
   const completa = results.filter(r=>r.status==='completa');
   const enConsulta = results.filter(r=>r.status==='en_consulta');
-  const pospuesta = results.filter(r=>r.status==='pospuesta');
   const noContesta = results.filter(r=>r.status==='no_contesta');
 
   // "Paciente no contesta" no cuenta en el % de plática registrada — ahí la
   // coordinadora sí hizo su trabajo, es la paciente quien no responde. Se
-  // excluye del denominador (a diferencia de en_consulta/pospuesta, que sí
-  // siguen contando en el total).
+  // excluye del denominador (a diferencia de en_consulta, que sí sigue
+  // contando en el total).
   const totalParaPct = results.length - noContesta.length;
 
   set('p-total', totalParaPct);
   set('p-si', completa.length);
   set('p-si-pct', totalParaPct>0 ? Math.round(completa.length/totalParaPct*100)+'% del total' : '—');
   set('p-enconsulta', enConsulta.length);
-  set('p-pospuesta', pospuesta.length);
   set('p-nocontesta', noContesta.length);
   set('p-no', sinPlatica.length);
   set('p-no-pct', totalParaPct>0 ? Math.round(sinPlatica.length/totalParaPct*100)+'% del total' : '—');
@@ -1524,7 +1496,6 @@ function renderPlatica() {
   document.getElementById('pill-sinplat').textContent = sinPlatica.length + ' pacientes';
   document.getElementById('pill-enconsulta').textContent = enConsulta.length + ' pacientes';
   document.getElementById('pill-completa').textContent = completa.length + ' pacientes';
-  document.getElementById('pill-pospuesta').textContent = pospuesta.length + ' pacientes';
   document.getElementById('pill-nocontesta').textContent = noContesta.length + ' pacientes';
 
   if (sinPlatica.length > 0) {
@@ -1559,17 +1530,6 @@ function renderPlatica() {
         <td class="td-muted">${r['Concepto']||'—'}</td>
         <td class="td-obs" title="${r.obs}">${r.obs.slice(0,100)||'—'}</td>
         ${notaCellHTML('enconsulta', r['Apellidos, Nombre'], r.fechaStr, r['Concepto'])}
-      </tr>`).join('');
-
-  document.getElementById('tbody-pospuesta').innerHTML = pospuesta.length === 0
-    ? '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px;">Sin casos en esta categoría</td></tr>'
-    : pospuesta.map(r => `<tr>
-        <td class="td-muted">${r.fechaStr}</td>
-        <td class="td-name">${r['Apellidos, Nombre']||'—'}</td>
-        <td><span class="tag tag-${r.c.toLowerCase()}">${r.c}</span></td>
-        <td class="td-muted">${r['Concepto']||'—'}</td>
-        <td class="td-obs" title="${r.obs}">${r.obs.slice(0,100)||'—'}</td>
-        ${notaCellHTML('pospuesta', r['Apellidos, Nombre'], r.fechaStr, r['Concepto'])}
       </tr>`).join('');
 
   document.getElementById('tbody-nocontesta').innerHTML = noContesta.length === 0
