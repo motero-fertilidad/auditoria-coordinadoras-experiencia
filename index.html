@@ -100,6 +100,9 @@
   .td-name { font-weight: 600; }
   .td-muted { color: var(--muted); font-size: 11px; }
   .td-obs { color: var(--muted); font-size: 11px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .td-nota { min-width: 160px; }
+  .nota-input { width: 100%; box-sizing: border-box; padding: 5px 8px; font-size: 11.5px; border: 1px solid #e5e7eb; border-radius: 6px; background: #fafafa; font-family: inherit; }
+  .nota-input:focus { outline: none; border-color: var(--blue); background: #fff; }
   .td-red { color: var(--red); font-weight: 700; }
   .td-green { color: #16a34a; font-weight: 600; }
   .td-amber { color: var(--amber); font-weight: 600; }
@@ -310,7 +313,7 @@
     <div class="section">
       <div class="sec-head"><div class="sec-title">Detalle de add-ons vendidos</div></div>
       <div class="tbl-wrap"><table>
-        <thead><tr><th>Fecha</th><th>Paciente</th><th>Ciudad</th><th>Add-on</th><th>Categoría</th><th>Monto</th></tr></thead>
+        <thead><tr><th>Fecha</th><th>Paciente</th><th>Ciudad</th><th>Add-on</th><th>Categoría</th><th>Monto</th><th>Notas</th></tr></thead>
         <tbody id="tbody-addons"></tbody>
       </table></div>
     </div>
@@ -344,7 +347,7 @@
     <div class="section" style="margin-top:20px;">
       <div class="sec-head"><div class="sec-title">Pacientes con expediente incompleto</div><span class="pill pill-red" id="pill-incompleto"></span></div>
       <div class="tbl-wrap"><table>
-        <thead><tr><th>Paciente</th><th>Coordinadora</th><th>Demog</th><th>Contacto</th><th>CP</th><th>Clasificación</th><th>Factura</th><th>Observaciones</th></tr></thead>
+        <thead><tr><th>Paciente</th><th>Coordinadora</th><th>Demog</th><th>Contacto</th><th>CP</th><th>Clasificación</th><th>Factura</th><th>Observaciones</th><th>Notas</th></tr></thead>
         <tbody id="tbody-incompleto"></tbody>
       </table></div>
     </div>
@@ -370,14 +373,14 @@
       <div class="sec-head"><div class="sec-title">Pacientes sin plática registrada</div><span class="pill pill-red" id="pill-sinplat"></span></div>
       <div id="alert-sinplat"></div>
       <div class="tbl-wrap"><table>
-        <thead><tr><th>Fecha Consulta</th><th>Paciente</th><th>Ciudad</th><th>Tipo de consulta</th><th>Coordinadora</th><th>Días sin plática</th><th>Observaciones</th></tr></thead>
+        <thead><tr><th>Fecha Consulta</th><th>Paciente</th><th>Ciudad</th><th>Tipo de consulta</th><th>Coordinadora</th><th>Días sin plática</th><th>Observaciones</th><th>Notas</th></tr></thead>
         <tbody id="tbody-sinplat"></tbody>
       </table></div>
     </div>
     <div class="section" style="margin-top:20px;">
       <div class="sec-head"><div class="sec-title">Entregados en consulta · validar con doctor</div><span class="pill pill-amber" id="pill-enconsulta"></span></div>
       <div class="tbl-wrap"><table>
-        <thead><tr><th>Fecha</th><th>Paciente</th><th>Ciudad</th><th>Tipo</th><th>Nota</th></tr></thead>
+        <thead><tr><th>Fecha</th><th>Paciente</th><th>Ciudad</th><th>Tipo</th><th>Observación</th><th>Notas</th></tr></thead>
         <tbody id="tbody-enconsulta"></tbody>
       </table></div>
     </div>
@@ -385,7 +388,7 @@
       <div class="sec-head"><div class="sec-title">Pospuesta / no aplica esta semana</div><span class="pill pill-blue" id="pill-pospuesta"></span></div>
       <p style="font-size:12px;color:var(--muted);margin:-4px 0 10px;">Se mandó con otro doctor, la paciente ya no está interesada, o la plática se dará hasta tener todos los estudios completos.</p>
       <div class="tbl-wrap"><table>
-        <thead><tr><th>Fecha</th><th>Paciente</th><th>Ciudad</th><th>Tipo</th><th>Nota</th></tr></thead>
+        <thead><tr><th>Fecha</th><th>Paciente</th><th>Ciudad</th><th>Tipo</th><th>Observación</th><th>Notas</th></tr></thead>
         <tbody id="tbody-pospuesta"></tbody>
       </table></div>
     </div>
@@ -393,14 +396,14 @@
       <div class="sec-head"><div class="sec-title">Paciente no contesta</div><span class="pill pill-grey" id="pill-nocontesta"></span></div>
       <p style="font-size:12px;color:var(--muted);margin:-4px 0 10px;">La coordinadora intentó localizar a la paciente pero no contesta llamadas ni mensajes — no cuenta en el % de plática registrada.</p>
       <div class="tbl-wrap"><table>
-        <thead><tr><th>Fecha</th><th>Paciente</th><th>Ciudad</th><th>Tipo</th><th>Coordinadora</th><th>Nota</th></tr></thead>
+        <thead><tr><th>Fecha</th><th>Paciente</th><th>Ciudad</th><th>Tipo</th><th>Coordinadora</th><th>Observación</th><th>Notas</th></tr></thead>
         <tbody id="tbody-nocontesta"></tbody>
       </table></div>
     </div>
     <div class="section" style="margin-top:20px;">
       <div class="sec-head"><div class="sec-title">Plática completada ✔</div><span class="pill pill-green" id="pill-completa"></span></div>
       <div class="tbl-wrap"><table>
-        <thead><tr><th>Fecha Consulta</th><th>Paciente</th><th>Ciudad</th><th>Tipo</th><th>Plática</th><th>Doctor</th></tr></thead>
+        <thead><tr><th>Fecha Consulta</th><th>Paciente</th><th>Ciudad</th><th>Tipo</th><th>Plática</th><th>Doctor</th><th>Notas</th></tr></thead>
         <tbody id="tbody-completa"></tbody>
       </table></div>
     </div>
@@ -1051,6 +1054,7 @@ function renderConversion() {
         <td class="td-muted">${r['Concepto']||'—'}</td>
         <td class="td-muted">${r['Profesional']||'—'}</td>
         <td>${estadoBadge}</td>
+        ${notaCellHTML('conversion_pv', r['Apellidos, Nombre'], fmtDate(r['Fecha']), r['Concepto'])}
       </tr>`;
     }).join('');
 
@@ -1060,6 +1064,7 @@ function renderConversion() {
         <td class="td-name">${r['Apellidos, Nombre']||'—'}</td>
         <td class="td-muted">${r['Profesional Historia']||r['Profesional']||'—'}</td>
         <td><span class="badge b-green">Terminada</span></td>
+        ${notaCellHTML('conversion_cap', r['Apellidos, Nombre'], fmtDate(r['Fecha']), r['Profesional Historia']||r['Profesional'])}
       </tr>`;
     }).join('');
 
@@ -1074,8 +1079,8 @@ function renderConversion() {
         <summary style="font-size:11.5px;font-weight:600;color:var(--muted);cursor:pointer;padding:4px 0;">Ver primeras veces (${gPVDetailRows.length})</summary>
         <div class="tbl-wrap" style="margin-top:6px;">
           <table>
-            <thead><tr><th>Fecha</th><th>Paciente</th><th>Tipo</th><th>Doctor</th><th>Estado</th></tr></thead>
-            <tbody>${pvDetail || '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:14px;">Sin primeras veces</td></tr>'}</tbody>
+            <thead><tr><th>Fecha</th><th>Paciente</th><th>Tipo</th><th>Doctor</th><th>Estado</th><th>Notas</th></tr></thead>
+            <tbody>${pvDetail || '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:14px;">Sin primeras veces</td></tr>'}</tbody>
           </table>
         </div>
       </details>
@@ -1083,8 +1088,8 @@ function renderConversion() {
         <summary style="font-size:11.5px;font-weight:600;color:var(--muted);cursor:pointer;padding:4px 0;">Ver capturas ovulares (${gCap.length})</summary>
         <div class="tbl-wrap" style="margin-top:6px;">
           <table>
-            <thead><tr><th>Fecha</th><th>Paciente</th><th>Doctor</th><th>Estado</th></tr></thead>
-            <tbody>${capDetail || '<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:14px;">Sin capturas</td></tr>'}</tbody>
+            <thead><tr><th>Fecha</th><th>Paciente</th><th>Doctor</th><th>Estado</th><th>Notas</th></tr></thead>
+            <tbody>${capDetail || '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:14px;">Sin capturas</td></tr>'}</tbody>
           </table>
         </div>
       </details>
@@ -1253,7 +1258,7 @@ function renderAddons() {
   };
 
   document.getElementById('tbody-addons').innerHTML = filteredAddons.length === 0
-    ? '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px;">Sin add-ons detectados esta semana</td></tr>'
+    ? '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px;">Sin add-ons detectados esta semana</td></tr>'
     : filteredAddons.map(a => `<tr>
         <td class="td-muted">${a.fecha}</td>
         <td class="td-name">${a.paciente}</td>
@@ -1261,6 +1266,7 @@ function renderAddons() {
         <td>${a.addon}</td>
         <td><span class="badge ${CAT_COLORS[a.cat]||'b-grey'}">${a.cat}</span></td>
         <td class="td-muted">$${Number(a.monto||0).toLocaleString('es-MX')}</td>
+        ${notaCellHTML('addons', a.paciente, a.fecha, a.addon)}
       </tr>`).join('');
 
   show('loading-addons', false);
@@ -1329,11 +1335,28 @@ function renderExperiencia() {
     ].filter(Boolean).join(' · ');
   }
 
+  // Solo incluir pacientes que sí asistieron (Estado === 'Terminada' en citas).
+  // Si un paciente tiene alguna cita Terminada, se considera que asistió; si
+  // todas sus citas están en No Asiste/Reasignada/Anulada, se excluye.
+  const citasByName = {};
+  (state.citas || []).forEach(r => {
+    const key = normName(r['Apellidos, Nombre'] || '');
+    if (!key) return;
+    if (!(key in citasByName)) citasByName[key] = false;
+    if (r['Estado'] === 'Terminada') citasByName[key] = true;
+  });
+  function asistio(row) {
+    const key = normName(row['paciente'] || '');
+    if (!key || !(key in citasByName)) return true; // sin match en citas, no excluir por precaución
+    return citasByName[key];
+  }
+
   // Filter to audited coordinadoras only, applying coord filter
   const audited = rows.filter(r => {
     const coord = getCoordFromSheet(r);
     if (!coord) return false;
     if (coordFilter && coord !== coordFilter) return false;
+    if (!asistio(r)) return false;
     return true;
   });
 
@@ -1374,7 +1397,7 @@ function renderExperiencia() {
   document.getElementById('pill-incompleto').textContent = incompleto.length + ' pacientes';
 
   document.getElementById('tbody-incompleto').innerHTML = incompleto.length === 0
-    ? '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px;">Todos los expedientes están completos ✔</td></tr>'
+    ? '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:24px;">Todos los expedientes están completos ✔</td></tr>'
     : incompleto.map(r => {
         const coord = getCoordFromSheet(r);
         const sede = (r['sede_cita'] || r['sede'] || r['ciudad'] || '—');
@@ -1391,6 +1414,7 @@ function renderExperiencia() {
           <td>${badge(r['clasificacion'] || r['clasificación'])}</td>
           <td>${badge(r['f_emitida'])}</td>
           <td style="min-width:160px;max-width:280px;white-space:normal;word-break:break-word;color:var(--muted);font-size:11px;" title="${obs}">${obs || '—'}</td>
+          ${notaCellHTML('incompleto', r['paciente'], r['dia_cita'], null)}
         </tr>`;
       }).join('');
 
@@ -1409,8 +1433,7 @@ function renderPlatica() {
   // All first-time patients with studies
   const pvConEstudio = rows.filter(r =>
     isPV(r['Concepto']) &&
-    r['Estado'] !== 'Anulada' &&
-    r['Estado'] !== 'Reasignada' &&
+    r['Estado'] === 'Terminada' &&
     !isExternal(r) &&
     hasStudy(r['Concepto'], r['Obs.']) &&
     (!coordFilter || getCoord(r, getCiudad(r)) === coordFilter)
@@ -1419,8 +1442,7 @@ function renderPlatica() {
   // Also gine with study (already included in PV_CONCEPTS but keep for safety)
   const gineConEstudio = rows.filter(r =>
     isGine(r['Concepto']) &&
-    r['Estado'] !== 'Anulada' &&
-    r['Estado'] !== 'Reasignada' &&
+    r['Estado'] === 'Terminada' &&
     !isExternal(r) &&
     hasStudy(r['Concepto'], r['Obs.']) &&
     !isPV(r['Concepto']) &&
@@ -1516,7 +1538,7 @@ function renderPlatica() {
   }
 
   document.getElementById('tbody-sinplat').innerHTML = sinPlatica.length === 0
-    ? '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px;">No hay pacientes sin plática esta semana ✔</td></tr>'
+    ? '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px;">No hay pacientes sin plática esta semana ✔</td></tr>'
     : sinPlatica.sort((a,b)=>(b.dias||0)-(a.dias||0)).map(r => `<tr>
         <td class="td-muted">${r.fechaStr}</td>
         <td class="td-name">${r['Apellidos, Nombre']||'—'}</td>
@@ -1525,30 +1547,33 @@ function renderPlatica() {
         <td>${r.coord?`<span class="badge b-teal">${r.coord}</span>`:'<span class="td-muted">—</span>'}</td>
         <td class="td-red">${r.dias!=null?r.dias+' días':'—'}</td>
         <td class="td-obs" title="${r.obs}">${r.obs.slice(0,80)||'—'}</td>
+        ${notaCellHTML('sinplat', r['Apellidos, Nombre'], r.fechaStr, r['Concepto'])}
       </tr>`).join('');
 
   document.getElementById('tbody-enconsulta').innerHTML = enConsulta.length === 0
-    ? '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px;">Sin casos en esta categoría</td></tr>'
+    ? '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px;">Sin casos en esta categoría</td></tr>'
     : enConsulta.map(r => `<tr>
         <td class="td-muted">${r.fechaStr}</td>
         <td class="td-name">${r['Apellidos, Nombre']||'—'}</td>
         <td><span class="tag tag-${r.c.toLowerCase()}">${r.c}</span></td>
         <td class="td-muted">${r['Concepto']||'—'}</td>
         <td class="td-obs" title="${r.obs}">${r.obs.slice(0,100)||'—'}</td>
+        ${notaCellHTML('enconsulta', r['Apellidos, Nombre'], r.fechaStr, r['Concepto'])}
       </tr>`).join('');
 
   document.getElementById('tbody-pospuesta').innerHTML = pospuesta.length === 0
-    ? '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px;">Sin casos en esta categoría</td></tr>'
+    ? '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px;">Sin casos en esta categoría</td></tr>'
     : pospuesta.map(r => `<tr>
         <td class="td-muted">${r.fechaStr}</td>
         <td class="td-name">${r['Apellidos, Nombre']||'—'}</td>
         <td><span class="tag tag-${r.c.toLowerCase()}">${r.c}</span></td>
         <td class="td-muted">${r['Concepto']||'—'}</td>
         <td class="td-obs" title="${r.obs}">${r.obs.slice(0,100)||'—'}</td>
+        ${notaCellHTML('pospuesta', r['Apellidos, Nombre'], r.fechaStr, r['Concepto'])}
       </tr>`).join('');
 
   document.getElementById('tbody-nocontesta').innerHTML = noContesta.length === 0
-    ? '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px;">Sin casos en esta categoría</td></tr>'
+    ? '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px;">Sin casos en esta categoría</td></tr>'
     : noContesta.map(r => `<tr>
         <td class="td-muted">${r.fechaStr}</td>
         <td class="td-name">${r['Apellidos, Nombre']||'—'}</td>
@@ -1556,10 +1581,11 @@ function renderPlatica() {
         <td class="td-muted">${r['Concepto']||'—'}</td>
         <td>${r.coord?`<span class="badge b-teal">${r.coord}</span>`:'<span class="td-muted">—</span>'}</td>
         <td class="td-obs" title="${r.obs}">${r.obs.slice(0,100)||'—'}</td>
+        ${notaCellHTML('nocontesta', r['Apellidos, Nombre'], r.fechaStr, r['Concepto'])}
       </tr>`).join('');
 
   document.getElementById('tbody-completa').innerHTML = completa.length === 0
-    ? '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px;">Sin pláticas registradas esta semana</td></tr>'
+    ? '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px;">Sin pláticas registradas esta semana</td></tr>'
     : completa.map(r => `<tr>
         <td class="td-muted">${r.fechaStr}</td>
         <td class="td-name">${r['Apellidos, Nombre']||'—'}</td>
@@ -1567,6 +1593,7 @@ function renderPlatica() {
         <td class="td-muted">${r['Concepto']||'—'}</td>
         <td><span class="badge b-green">Registrada ✔</span></td>
         <td class="td-muted">${r['Profesional']||'—'}</td>
+        ${notaCellHTML('completa', r['Apellidos, Nombre'], r.fechaStr, r['Concepto'])}
       </tr>`).join('');
 
   show('loading-platica', false);
@@ -1740,6 +1767,43 @@ window.addEventListener('load', () => {
 });
 
 // ─── HISTORIAL ────────────────────────────────────────────────────────────────
+// ─── NOTAS POR FILA (persistentes en localStorage) ────────────────────────────
+// Cada tabla de pacientes tiene una columna "Notas" editable para que las
+// coordinadoras dejen comentarios libres (ej. "ya se le llamó", "confirmar
+// con doctor"). Se guardan localmente en el navegador, por fila — la llave
+// combina la tabla + paciente + fecha + concepto para no mezclar notas de
+// contextos distintos del mismo paciente.
+const NOTES_KEY = 'fi_auditoria_notas';
+
+function getNotas() {
+  try { return JSON.parse(localStorage.getItem(NOTES_KEY) || '{}'); }
+  catch { return {}; }
+}
+
+function notaKey(tabla, paciente, fecha, concepto) {
+  return [tabla, normName(paciente || ''), fecha || '', (concepto || '').toLowerCase().trim()].join('|');
+}
+
+function guardarNota(key, valor) {
+  const notas = getNotas();
+  if (valor && valor.trim()) notas[key] = valor;
+  else delete notas[key];
+  try { localStorage.setItem(NOTES_KEY, JSON.stringify(notas)); }
+  catch (e) { alert('No se pudo guardar la nota: el almacenamiento local del navegador está lleno.'); }
+}
+
+// Escapa comillas para poder meter el valor dentro del atributo value="...".
+function escAttr(s) {
+  return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+}
+
+function notaCellHTML(tabla, paciente, fecha, concepto) {
+  const key = notaKey(tabla, paciente, fecha, concepto);
+  const notas = getNotas();
+  const val = escAttr(notas[key] || '');
+  return `<td class="td-nota"><input type="text" class="nota-input" placeholder="Agregar nota…" value="${val}" data-notakey="${escAttr(key)}" onchange="guardarNota(this.dataset.notakey, this.value)"></td>`;
+}
+
 const HIST_KEY = 'fi_auditoria_historial';
 
 function getHistorial() {
