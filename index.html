@@ -3,6 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- Evita que el navegador se quede con una versión vieja del tablero en caché
+     cuando se sube un index.html actualizado a GitHub Pages. -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Auditoría · Coordinadoras de Experiencia · FI</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
@@ -897,16 +902,40 @@ function normTxt(s) {
     .replace(/\s+/g,' ').trim();
 }
 const EN_CONSULTA_KW_NORM = EN_CONSULTA_KW.map(normTxt);
+// Además de la lista literal, estos patrones toleran el orden de las palabras,
+// para que "resultados se entregaron en consulta", "se dieron los resultados en
+// la consulta" o "en la consulta se interpretaron los estudios" también cuenten
+// sin tener que enumerar cada redacción posible. Se aplican sobre texto ya
+// normalizado (minúsculas, sin acentos).
+const EN_CONSULTA_RE = [
+  // "…resultados/estudios/plática… en la consulta" (hasta 45 caracteres en medio)
+  /(resultado|estudio|platica|amh|ham|\bed\b)[^.;\n]{0,45}\b(en|durante)\s+(la\s+|su\s+)?consulta/,
+  // "en la consulta… resultados/estudios/plática…"
+  /\b(en|durante)\s+(la\s+|su\s+)?consulta[^.;\n]{0,45}(resultado|estudio|platica|interpret)/,
+  // "la plática de resultados fue/se dio en…"
+  /platica\s+de\s+resultados?[^.;\n]{0,25}(fue|se dio|se hizo|por llamada|por telefono|por videollamada)/,
+  // "se interpretaron los estudios…"
+  /se\s+(le\s+|les\s+)?interpretaron/,
+  // "estudios previos / ya se hizo la HAM antes"
+  /\b(adjunt|envi|mand|trajo|trajeron|traia|traian|trae|traen|cuenta|cuentan|tiene|tienen|tenia|tenian)\w*[^.;\n]{0,25}(sus\s+|los\s+|unos\s+)?estudios?\s+previos?/,
+  /(ya|anteriormente)\s+(se\s+)?(le\s+)?(ha\s+)?(realiz|hizo|tomo|tom)\w*[^.;\n]{0,15}(ham|amh|\bed\b)/,
+];
 const NO_ESTUDIO_KW_NORM = NO_ESTUDIO_KW.map(normTxt);
 function noAplicaEstudio(obs) {
   const o = normTxt(obs);
   if (!o) return false;
   return NO_ESTUDIO_KW_NORM.some(k => k && o.includes(k));
 }
+// "NO trae estudios previos" es lo contrario de "trae estudios previos": la
+// frase negada se borra del texto antes de buscar coincidencias.
+const NEG_ESTUDIOS_RE = /\bno\s+(se\s+)?(le\s+)?(trae|traen|trajo|trajeron|traia|traian|adjunt\w*|envi\w*|mand\w*|cuenta|cuentan|tiene|tienen|tenia|tenian)\b[^.;\n]{0,25}estudios?\s+previos?/g;
 function isEnConsulta(obs) {
-  const o = normTxt(obs);
+  let o = normTxt(obs);
   if (!o) return false;
-  return EN_CONSULTA_KW_NORM.some(k => k && o.includes(k));
+  if (noAplicaEstudio(o)) return false;   // "no se tomó HAM" no es entrega de resultados
+  o = o.replace(NEG_ESTUDIOS_RE, ' ');
+  if (EN_CONSULTA_KW_NORM.some(k => k && o.includes(k))) return true;
+  return EN_CONSULTA_RE.some(re => re.test(o));
 }
 // Un paciente cuenta como "entregado en consulta" si:
 //  a) su observación en Vrepro lo indica (isEnConsulta),
