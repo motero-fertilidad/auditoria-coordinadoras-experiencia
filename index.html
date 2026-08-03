@@ -265,7 +265,7 @@
     <div class="kpi-grid">
       <div class="kpi-card k-neutral"><div class="kpi-label">Primeras veces · semana</div><div class="kpi-num" id="r-pv">—</div><div class="kpi-sub" id="r-pv-split">GDL + CDMX</div></div>
       <div class="kpi-card k-blue"><div class="kpi-label">Capturas ovulares</div><div class="kpi-num" id="r-cap">—</div><div class="kpi-sub">Terminadas</div></div>
-      <div class="kpi-card k-green"><div class="kpi-label">Pláticas registradas</div><div class="kpi-num" id="r-plat">—</div><div class="kpi-sub" id="r-plat-pct">% de primeras veces con estudio</div></div>
+      <div class="kpi-card k-green"><div class="kpi-label">Pláticas cumplidas</div><div class="kpi-num" id="r-plat">—</div><div class="kpi-sub" id="r-plat-pct">% de primeras veces con estudio</div></div>
       <div class="kpi-card k-red"><div class="kpi-label">Sin plática registrada</div><div class="kpi-num" id="r-sinplat">—</div><div class="kpi-sub">Requieren seguimiento</div></div>
     </div>
     <div class="city-split" id="city-split-resumen"></div>
@@ -363,8 +363,8 @@
     </div>
     <div class="kpi-grid">
       <div class="kpi-card k-neutral"><div class="kpi-label">Primeras veces con estudio</div><div class="kpi-num" id="p-total">—</div><div class="kpi-sub">Requieren plática de resultados</div></div>
-      <div class="kpi-card k-green"><div class="kpi-label">Plática registrada</div><div class="kpi-num" id="p-si">—</div><div class="kpi-sub" id="p-si-pct">% del total</div></div>
-      <div class="kpi-card k-amber"><div class="kpi-label">Entregados en consulta</div><div class="kpi-num" id="p-enconsulta">—</div><div class="kpi-sub">Sin registro formal en Vrepro</div></div>
+      <div class="kpi-card k-green"><div class="kpi-label">Plática cumplida</div><div class="kpi-num" id="p-si">—</div><div class="kpi-sub" id="p-si-pct">% del total</div></div>
+      <div class="kpi-card k-amber"><div class="kpi-label">Entregados en consulta</div><div class="kpi-num" id="p-enconsulta">—</div><div class="kpi-sub">Ya incluidos en “Plática cumplida”</div></div>
       <div class="kpi-card k-grey"><div class="kpi-label">Paciente no contesta</div><div class="kpi-num" id="p-nocontesta">—</div><div class="kpi-sub">No cuenta en el % — la coordinadora sí gestionó</div></div>
       <div class="kpi-card k-red"><div class="kpi-label">Sin plática registrada</div><div class="kpi-num" id="p-no">—</div><div class="kpi-sub" id="p-no-pct">% del total</div></div>
     </div>
@@ -377,7 +377,8 @@
       </table></div>
     </div>
     <div class="section" style="margin-top:20px;">
-      <div class="sec-head"><div class="sec-title">Entregados en consulta · validar con doctor</div><span class="pill pill-amber" id="pill-enconsulta"></span></div>
+      <div class="sec-head"><div class="sec-title">Se entregaron resultados en consulta</div><span class="pill pill-amber" id="pill-enconsulta"></span></div>
+      <p style="font-size:12px;color:var(--muted);margin:-4px 0 10px;">La paciente ya recibió sus resultados —en la consulta, con estudios previos/hechos días antes, o por llamada— aunque no quedó una cita de "Plática de resultados" aparte en Vrepro. <strong>Cuentan como plática cumplida</strong> y no aparecen en "sin plática registrada". Si un caso falta aquí, escríbelo en la columna <em>Notas</em> (ej. "se dieron resultados en consulta") y se reclasifica.</p>
       <div class="tbl-wrap"><table>
         <thead><tr><th>Fecha</th><th>Paciente</th><th>Ciudad</th><th>Tipo</th><th>Observación</th><th>Notas</th></tr></thead>
         <tbody id="tbody-enconsulta"></tbody>
@@ -743,7 +744,46 @@ const EN_CONSULTA_KW = ['interpretaron','se entregan durante','se le dieron resu
   'se tomo la ham','se tomó la ham','se le tomo la ham','se le tomó la ham','ya se tomo la ham','ya se tomó la ham',
   'se tomo el ed','se tomó el ed','se le tomo el ed','se le tomó el ed','ya se tomo el ed','ya se tomó el ed',
   'ya tiene su ham','ya tiene el ed','ya tiene su ed','se hizo la ham','se hizo el ed',
-  'se hizo prueba antimulleriana','se hizo prueba antimülleriana','prueba antimulleriana ya','ya se hizo la prueba antimulleriana'];
+  'se hizo prueba antimulleriana','se hizo prueba antimülleriana','prueba antimulleriana ya','ya se hizo la prueba antimulleriana',
+  // La paciente adjuntó / envió estudios previos (consulta online o presencial)
+  'adjunto estudios','adjuntó estudios','se adjunto estudios','se adjuntó estudios',
+  'adjunto sus estudios','adjuntó sus estudios','adjunto estudios previos','adjuntó estudios previos',
+  'adjunto los estudios','adjuntó los estudios','envio estudios','envió estudios',
+  'mando estudios','mandó estudios','estudios de ham previos','estudios previos de ham',
+  'con estudios externos','con estudios previos','trae estudios','traen estudios',
+  // Los estudios ya se habían hecho antes de la consulta (días/semanas antes, o en otra institución)
+  'se ha realizado la ham','se ha realizado el ed','se habia realizado la ham','se había realizado la ham',
+  'ya se realizo la ham','ya se realizó la ham','ya se realizo el ed','ya se realizó el ed',
+  'anteriormente se ha realizado','ya se habia hecho la ham','ya se había hecho la ham',
+  'ya se hizo estudios','ya se hicieron los estudios','estudios hechos antes','estudios realizados antes',
+  'se hicieron los estudios dias antes','se hicieron los estudios días antes',
+  'estudios dias antes','estudios días antes','se tomo la ham antes','se tomó la ham antes',
+  'ya tenia su ham','ya tenía su ham','ya tenia sus resultados','ya tenía sus resultados',
+  'ya contaba con estudios','ya contaba con sus estudios','trae resultados','trae sus resultados',
+  // La propia consulta funcionó como plática de resultados
+  'la platica de resultados fue la consulta','la plática de resultados fue la consulta',
+  'platica de resultados fue la consulta','plática de resultados fue la consulta',
+  'la consulta fue la platica de resultados','la consulta fue la plática de resultados',
+  'consulta fungio como platica','consulta fungió como plática',
+  'se dio la platica en la consulta','se dio la plática en la consulta',
+  'se dieron resultados en consulta','se dieron los resultados en consulta',
+  'se dio resultados en consulta','se entregan resultados','se entregaron resultados',
+  'se entrego resultados','se entregó resultados','se entregaron los resultados',
+  'resultados entregados','entrega de resultados durante la consulta',
+  // Plática de resultados dada por llamada / videollamada (no quedó como cita en Vrepro)
+  'platica de resultados por llamada','plática de resultados por llamada',
+  'platica de resultados por telefono','plática de resultados por teléfono',
+  'platica de resultados por videollamada','plática de resultados por videollamada',
+  'resultados por llamada','resultados por telefono','resultados por teléfono',
+  'resultados por whatsapp','platica por llamada','plática por llamada'];
+// Excepciones manuales: pacientes que SÍ recibieron sus resultados en consulta
+// pero cuya observación en Vrepro no lo dice (ej. la coordinadora lo confirmó
+// verbalmente). Se comparan con normName(), así que basta el nombre tal como
+// aparece en el export ("Apellidos, Nombre"). Acentos y mayúsculas no importan.
+const MANUAL_EN_CONSULTA = [
+  'Garcia Gonzalez, Ericka Elizabeth',
+];
+const MANUAL_EN_CONSULTA_SET = new Set(MANUAL_EN_CONSULTA.map(n => normName(n)));
 // Paciente no contesta llamadas/mensajes — la coordinadora sí gestionó el
 // seguimiento, así que no debe contar como "sin plática" ni afectar el %
 // de plática registrada (no es un tema de desempeño de la coordinadora).
@@ -825,7 +865,43 @@ function hasStudy(concepto, obs) {
   if (isPV(concepto)) return STUDY_KEYWORDS.some(k=>combined.includes(k));
   return false;
 }
-function isEnConsulta(obs) { const o=String(obs==null?'':obs).toLowerCase(); return EN_CONSULTA_KW.some(k=>o.includes(k)); }
+// Normaliza texto libre para comparar: minúsculas, sin acentos y sin espacios
+// dobles/saltos de línea. Así "SE TOMÓ LA HAM" y "se tomo la  ham" coinciden.
+function normTxt(s) {
+  return String(s==null?'':s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/\s+/g,' ').trim();
+}
+const EN_CONSULTA_KW_NORM = EN_CONSULTA_KW.map(normTxt);
+function isEnConsulta(obs) {
+  const o = normTxt(obs);
+  if (!o) return false;
+  return EN_CONSULTA_KW_NORM.some(k => k && o.includes(k));
+}
+// Un paciente cuenta como "entregado en consulta" si:
+//  a) su observación en Vrepro lo indica (isEnConsulta),
+//  b) está en la lista de excepciones manuales (MANUAL_EN_CONSULTA), o
+//  c) la coordinadora escribió una nota en la columna "Notas" que lo indica
+//     (ej. "se dieron resultados en consulta") — así se puede corregir un caso
+//     desde el propio dashboard, sin tocar el código.
+function esEntregadoEnConsulta(row, obs, fechaStr) {
+  if (isEnConsulta(obs)) return true;
+  if (MANUAL_EN_CONSULTA_SET.has(normName(row['Apellidos, Nombre']))) return true;
+  return notaDiceEnConsulta(row['Apellidos, Nombre'], fechaStr, row['Concepto']);
+}
+// Busca en las notas guardadas de este paciente (en cualquiera de las tablas de
+// plática) algo que indique entrega en consulta.
+// Todas las tablas del panel de plática comparten el namespace 'platica' para
+// que la nota siga a la paciente aunque cambie de categoría. Los nombres
+// antiguos se conservan para migrar/leer notas guardadas previamente.
+const NOTA_TABLA_PLATICA = 'platica';
+const NOTA_TABLAS_PLATICA = ['platica','sinplat','enconsulta','nocontesta','completa'];
+function notaDiceEnConsulta(paciente, fechaStr, concepto) {
+  const notas = getNotas();
+  return NOTA_TABLAS_PLATICA.some(t => {
+    const v = notas[notaKey(t, paciente, fechaStr, concepto)];
+    return v && isEnConsulta(v);
+  });
+}
 
 // Convierte montos en formato es-MX ("1.300,00" -> 1300, punto=miles, coma=decimales)
 // a un Number utilizable. Acepta también valores ya numéricos.
@@ -1415,9 +1491,11 @@ function renderExperiencia() {
 }
 
 // ─── PLÁTICA DE RESULTADOS ────────────────────────────────────────────────────
-function renderPlatica() {
-  const rows = state.citas;
-  const coordFilter = activeFilters['platica'];
+// Clasificación única de plática de resultados. La usan tanto el panel de
+// "Plática de Resultados" como el Resumen, para que los números coincidan
+// entre pestañas.
+function computePlatica(rows, coordFilter) {
+  rows = rows || [];
 
   // All first-time patients with studies
   const pvConEstudio = rows.filter(r =>
@@ -1447,13 +1525,13 @@ function renderPlatica() {
   const resultsBase = conEstudio.map(r => {
     const name = normName(r['Apellidos, Nombre']);
     const obs = String(r['Obs.']==null ? '' : r['Obs.']);
-    const enConsulta = isEnConsulta(obs);
-    const noContesta = isNoContesta(obs);
-    const tienePlatica = platicaNames.has(name);
     const coord = getCoord(r, getCiudad(r));
     const c = getCiudad(r);
     const fechaStr = fmtDate(r['Fecha']);
     const dias = daysSince(fechaStr);
+    const enConsulta = esEntregadoEnConsulta(r, obs, fechaStr);
+    const noContesta = isNoContesta(obs);
+    const tienePlatica = platicaNames.has(name);
 
     let status;
     if (enConsulta) status = 'en_consulta';
@@ -1494,13 +1572,25 @@ function renderPlatica() {
 
   // "Paciente no contesta" no cuenta en el % de plática registrada — ahí la
   // coordinadora sí hizo su trabajo, es la paciente quien no responde. Se
-  // excluye del denominador (a diferencia de en_consulta, que sí sigue
-  // contando en el total).
+  // excluye del denominador.
   const totalParaPct = results.length - noContesta.length;
 
+  // Los casos "entregados en consulta" SÍ cuentan como cumplidos: la paciente
+  // ya recibió sus resultados (en la consulta, con estudios previos, o por
+  // llamada), solo no quedó registrado como una cita de "Plática de
+  // resultados" aparte en Vrepro. No deben castigar a la coordinadora.
+  const cumplidas = completa.length + enConsulta.length;
+
+  return { results, sinPlatica, completa, enConsulta, noContesta, totalParaPct, cumplidas };
+}
+
+function renderPlatica() {
+  const { sinPlatica, completa, enConsulta, noContesta, totalParaPct, cumplidas } =
+    computePlatica(state.citas, activeFilters['platica']);
+
   set('p-total', totalParaPct);
-  set('p-si', completa.length);
-  set('p-si-pct', totalParaPct>0 ? Math.round(completa.length/totalParaPct*100)+'% del total' : '—');
+  set('p-si', cumplidas);
+  set('p-si-pct', totalParaPct>0 ? Math.round(cumplidas/totalParaPct*100)+'% del total' : '—');
   set('p-enconsulta', enConsulta.length);
   set('p-nocontesta', noContesta.length);
   set('p-no', sinPlatica.length);
@@ -1531,7 +1621,7 @@ function renderPlatica() {
         <td>${r.coord?`<span class="badge b-teal">${r.coord}</span>`:'<span class="td-muted">—</span>'}</td>
         <td class="td-red">${r.dias!=null?r.dias+' días':'—'}</td>
         <td class="td-obs" title="${r.obs}">${r.obs.slice(0,80)||'—'}</td>
-        ${notaCellHTML('sinplat', r['Apellidos, Nombre'], r.fechaStr, r['Concepto'])}
+        ${notaCellHTML('platica', r['Apellidos, Nombre'], r.fechaStr, r['Concepto'])}
       </tr>`).join('');
 
   document.getElementById('tbody-enconsulta').innerHTML = enConsulta.length === 0
@@ -1542,7 +1632,7 @@ function renderPlatica() {
         <td><span class="tag tag-${r.c.toLowerCase()}">${r.c}</span></td>
         <td class="td-muted">${r['Concepto']||'—'}</td>
         <td class="td-obs" title="${r.obs}">${r.obs.slice(0,100)||'—'}</td>
-        ${notaCellHTML('enconsulta', r['Apellidos, Nombre'], r.fechaStr, r['Concepto'])}
+        ${notaCellHTML('platica', r['Apellidos, Nombre'], r.fechaStr, r['Concepto'])}
       </tr>`).join('');
 
   document.getElementById('tbody-nocontesta').innerHTML = noContesta.length === 0
@@ -1554,7 +1644,7 @@ function renderPlatica() {
         <td class="td-muted">${r['Concepto']||'—'}</td>
         <td>${r.coord?`<span class="badge b-teal">${r.coord}</span>`:'<span class="td-muted">—</span>'}</td>
         <td class="td-obs" title="${r.obs}">${r.obs.slice(0,100)||'—'}</td>
-        ${notaCellHTML('nocontesta', r['Apellidos, Nombre'], r.fechaStr, r['Concepto'])}
+        ${notaCellHTML('platica', r['Apellidos, Nombre'], r.fechaStr, r['Concepto'])}
       </tr>`).join('');
 
   document.getElementById('tbody-completa').innerHTML = completa.length === 0
@@ -1566,7 +1656,7 @@ function renderPlatica() {
         <td class="td-muted">${r['Concepto']||'—'}</td>
         <td><span class="badge b-green">Registrada ✔</span></td>
         <td class="td-muted">${r['Profesional']||'—'}</td>
-        ${notaCellHTML('completa', r['Apellidos, Nombre'], r.fechaStr, r['Concepto'])}
+        ${notaCellHTML('platica', r['Apellidos, Nombre'], r.fechaStr, r['Concepto'])}
       </tr>`).join('');
 
   show('loading-platica', false);
@@ -1584,16 +1674,18 @@ function renderResumen() {
     capSeen2.add(key);
     return true;
   });
-  const conEstudio = citas.filter(r => isPV(r['Concepto']) && r['Estado']!=='Anulada' && r['Estado']!=='Reasignada' && !isExternal(r) && hasStudy(r['Concepto'],r['Obs.']));
-  const platicaRows = citas.filter(r => isPlatica(r['Concepto']) && r['Estado']!=='Anulada');
-  const platicaNames = new Set(platicaRows.map(r=>normName(r['Apellidos, Nombre'])));
-  const sinPlatica = conEstudio.filter(r => !platicaNames.has(normName(r['Apellidos, Nombre'])) && !isEnConsulta(r['Obs.']||''));
+  // Misma clasificación que el panel "Plática de Resultados" (función
+  // compartida) para que los números de las dos pestañas coincidan.
+  const plat = computePlatica(citas, null);
+  const sinPlatica = plat.sinPlatica;
+  const cumplidasResumen = plat.cumplidas;
+  const denomResumen = plat.totalParaPct;
 
   set('r-pv', pvRows.length);
   set('r-pv-split', `GDL: ${pvRows.filter(r=>getCiudad(r)==='GDL').length} · CDMX: ${pvRows.filter(r=>getCiudad(r)==='CDMX').length} · MET: ${pvRows.filter(r=>getCiudad(r)==='MET').length}`);
   set('r-cap', capRows.length);
-  set('r-plat', platicaRows.length);
-  set('r-plat-pct', conEstudio.length>0 ? Math.round(platicaRows.length/conEstudio.length*100)+'% de primeras veces con estudio' : '—');
+  set('r-plat', cumplidasResumen);
+  set('r-plat-pct', denomResumen>0 ? Math.round(cumplidasResumen/denomResumen*100)+'% de primeras veces con estudio' : '—');
   set('r-sinplat', sinPlatica.length);
 
   // City split resumen
@@ -1615,7 +1707,11 @@ function renderResumen() {
     const coord = getCoord(r, c);
     if (!coord || !byCoord[coord]) return;
     if (isPV(r['Concepto']) && isPVCountable(r['Estado']) && !isExternal(r)) byCoord[coord].pv++;
-    if (isPlatica(r['Concepto']) && r['Estado']!=='Anulada') byCoord[coord].plat++;
+  });
+  // "Pláticas cumplidas" por coordinadora = plática registrada en Vrepro o
+  // resultados ya entregados en consulta.
+  [...plat.completa, ...plat.enConsulta].forEach(r => {
+    if (r.coord && byCoord[r.coord]) byCoord[r.coord].plat++;
   });
   sinPlatica.forEach(r => {
     const c = getCiudad(r);
@@ -1629,7 +1725,7 @@ function renderResumen() {
     return `<div class="coord-card ${cls}">
       <div class="coord-name">${c}</div>
       <div class="coord-stat"><span class="cs-lbl">Primeras veces</span><span class="cs-val">${pv}</span></div>
-      <div class="coord-stat"><span class="cs-lbl">Pláticas registradas</span><span class="cs-val v-green">${plat}</span></div>
+      <div class="coord-stat"><span class="cs-lbl">Pláticas cumplidas</span><span class="cs-val v-green">${plat}</span></div>
       <div class="coord-stat"><span class="cs-lbl">Sin plática</span><span class="cs-val ${sin>0?'v-red':''}">${sin}</span></div>
     </div>`;
   }).join('');
@@ -1774,7 +1870,34 @@ function notaCellHTML(tabla, paciente, fecha, concepto) {
   const key = notaKey(tabla, paciente, fecha, concepto);
   const notas = getNotas();
   const val = escAttr(notas[key] || '');
-  return `<td class="td-nota"><input type="text" class="nota-input" placeholder="Agregar nota…" value="${val}" data-notakey="${escAttr(key)}" onchange="guardarNota(this.dataset.notakey, this.value)"></td>`;
+  return `<td class="td-nota"><input type="text" class="nota-input" placeholder="Agregar nota…" value="${val}" data-notakey="${escAttr(key)}" onchange="guardarNota(this.dataset.notakey, this.value); notaCambiada(this.dataset.notakey)"></td>`;
+}
+
+// Si la nota que se acaba de guardar pertenece a una de las tablas de plática,
+// se vuelve a renderizar el panel: una nota como "se dieron resultados en
+// consulta" reclasifica al paciente a "Se entregaron resultados en consulta".
+// Mueve las notas guardadas con los nombres de tabla antiguos (sinplat,
+// enconsulta, nocontesta, completa) al namespace unificado 'platica'.
+function migrarNotasPlatica() {
+  const notas = getNotas();
+  let cambio = false;
+  Object.keys(notas).forEach(k => {
+    const parts = k.split('|');
+    if (parts[0] === 'platica' || !NOTA_TABLAS_PLATICA.includes(parts[0])) return;
+    parts[0] = 'platica';
+    const nuevo = parts.join('|');
+    if (!notas[nuevo]) notas[nuevo] = notas[k];
+    delete notas[k];
+    cambio = true;
+  });
+  if (cambio) { try { localStorage.setItem(NOTES_KEY, JSON.stringify(notas)); } catch (e) {} }
+}
+try { migrarNotasPlatica(); } catch (e) {}
+
+function notaCambiada(key) {
+  const tabla = String(key||'').split('|')[0];
+  if (!NOTA_TABLAS_PLATICA.includes(tabla)) return;
+  if (state.citas && state.citas.length) { renderPlatica(); renderResumen(); }
 }
 
 const HIST_KEY = 'fi_auditoria_historial';
