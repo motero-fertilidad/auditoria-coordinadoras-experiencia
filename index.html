@@ -194,7 +194,7 @@
     <div class="fi-logo">FI</div>
     <div class="nav-title">
       <h1>Auditoría · Coordinadoras de Experiencia</h1>
-      <p>Fertilidad Integral · GDL y CDMX <span style="opacity:.55;">· v2026.08.03</span></p>
+      <p>Fertilidad Integral · GDL y CDMX <span style="opacity:.55;">· v2026.08.05</span></p>
     </div>
   </div>
   <div class="nav-right">
@@ -438,6 +438,38 @@ const DOCTOR_COORD_GDL = {
   'emanuel':               'Viviana',
   'ruby medina':           'Viviana',
 };
+// ── Reasignación de cartera en GDL a partir de agosto 2026 ──────────────────
+// Mariana se hace cargo de estos doctores. El cambio aplica SOLO a las citas y
+// cargos con fecha del 1 de agosto de 2026 en adelante: lo anterior sigue
+// contando para Viviana, para que los históricos y los snapshots guardados de
+// semanas pasadas no se alteren.
+const REASIGNACIONES_GDL = [
+  {
+    desde: '2026-08-01',
+    doctores: {
+      'diana duran':          'Mariana',
+      'blanca cardenas':      'Mariana',
+      'norma sharey vazquez': 'Mariana',
+      'emanuel':              'Mariana',
+      'ruby medina':          'Mariana',
+    },
+  },
+];
+// Devuelve el mapa doctor→coordinadora de GDL vigente en una fecha dada.
+// Sin fecha (o fecha ilegible) se usa el mapa base, el histórico.
+function mapaGDL(fecha) {
+  const f = fmtDate(fecha);
+  if (!f || f === '—') return DOCTOR_COORD_GDL;
+  let mapa = DOCTOR_COORD_GDL;
+  for (const r of REASIGNACIONES_GDL) {
+    if (f >= r.desde) mapa = { ...mapa, ...r.doctores };
+  }
+  return mapa;
+}
+// Fecha relevante de una fila: la cita para citas, la fecha del cargo para cargos.
+function fechaDeFila(row) {
+  return row && (row['Fecha'] || row['F. Cargo'] || row['dia_cita'] || row['fecha'] || null);
+}
 // CDMX
 const DOCTOR_COORD_CDMX = {
   'armando miguel roque sanchez': 'Jimena',
@@ -459,11 +491,11 @@ const DOCTOR_COORD_MET = {
   'guadalupe nolazco': 'Alondra',
 };
 
-const COORD_LIST = ['Viviana','Reyna','Jimena','Lucy','Sharon','Andrea','Alondra','Yanelli'];
+const COORD_LIST = ['Viviana','Mariana','Reyna','Jimena','Lucy','Sharon','Andrea','Alondra','Yanelli'];
 
 // Agrupación de coordinadoras por clínica (para filtros y vista de Conversión)
 const CLINIC_GROUPS = [
-  { label: 'GDL',  coords: ['Viviana'] },
+  { label: 'GDL',  coords: ['Viviana', 'Mariana'] },
   { label: 'CDMX', coords: ['Sharon', 'Reyna', 'Lucy', 'Jimena', 'Andrea'] },
   { label: 'MTP',  coords: ['Yanelli', 'Alondra'] },
 ];
@@ -582,6 +614,10 @@ const USUARIO_ALTA_MAP = {
   'judith guadalupe ontiveros diaz':  'Sharon',
   'brenda sanchez':                   'Andrea',
   'yanelli garcia':                   'Yanelli',
+  // PENDIENTE: agregar aquí el nombre completo de Mariana tal como aparece en
+  // "Usuario Alta" de los cargos (formato "RFC ( Nombre Completo)"). Sin esto,
+  // los add-ons que ella dé de alta y cuyo doctor no se pueda identificar no se
+  // le asignarán. Ej.:  'mariana ... ': 'Mariana',
   // Margarita Muñoz y Job Grimaldo son admin/operaciones, no coordinadoras
 };
 
@@ -601,10 +637,10 @@ function coordFromUsuarioAlta(raw) {
 // "Entidad" del cargo (que a veces no coincide con la sede real del doctor).
 // Esto evita asignaciones incorrectas por Usuario Alta cuando el doctor sí es
 // identificable directamente.
-function coordFromProfAnyCity(profRaw) {
+function coordFromProfAnyCity(profRaw, fecha) {
   const prof = normProf(profRaw || '');
   if (!prof) return null;
-  const allDoctors = {...DOCTOR_COORD_GDL, ...DOCTOR_COORD_CDMX, ...DOCTOR_COORD_MET};
+  const allDoctors = {...mapaGDL(fecha), ...DOCTOR_COORD_CDMX, ...DOCTOR_COORD_MET};
   for (const [doctor, coord] of Object.entries(allDoctors)) {
     if (prof.includes(normProf(doctor))) return coord;
   }
@@ -619,7 +655,8 @@ function getCoord(row, cityOverride) {
   const profField = isCaptura(row['Concepto']) ? 'Profesional Historia' : 'Profesional';
   const prof = normProf(row[profField] || '');
   const city = cityOverride || getCiudad(row);
-  const map = city === 'GDL' ? DOCTOR_COORD_GDL
+  const fecha = fechaDeFila(row);
+  const map = city === 'GDL' ? mapaGDL(fecha)
              : city === 'CDMX' ? DOCTOR_COORD_CDMX
              : city === 'MET' ? DOCTOR_COORD_MET
              : {};
@@ -639,7 +676,7 @@ function getCoord(row, cityOverride) {
   const usuario = normProf(row['Usuario Crea'] || '');
   let coordFromUsuarioDoctor = null;
   if (usuario) {
-    const allDoctors = {...DOCTOR_COORD_GDL, ...DOCTOR_COORD_CDMX, ...DOCTOR_COORD_MET};
+    const allDoctors = {...mapaGDL(fecha), ...DOCTOR_COORD_CDMX, ...DOCTOR_COORD_MET};
     for (const [doctor, coord] of Object.entries(allDoctors)) {
       if (usuario.includes(normProf(doctor))) { coordFromUsuarioDoctor = coord; break; }
     }
@@ -827,7 +864,7 @@ const NO_ESTUDIO_KW = [
 // Internal professionals by city (for isExternal filter)
 const PROF_GDL = ['jorge michel','carlos parra','blanca cardenas','yazmin ramos','edna amaro',
   'norma sharey vazquez','ana giannina garcia','ana gianina garcia','itzury padilla',
-  'diana duran','carlos macias','ruby medina'];
+  'diana duran','carlos macias','ruby medina','emanuel sanchez','emanuel'];
 const PROF_CDMX = ['alma victoria villarreal barranca','giovanni lopez salamanca',
   'giovanni lópez salamanca','ruben gonzalez ruiz','eugenia moran orozco','eugenia morán orozco',
   'jaime antonio hidalgo carrera','armando miguel roque sanchez','jairo hernando pedraza pinto',
@@ -1333,7 +1370,7 @@ function renderAddons() {
     // 1) Profesional Historia del cargo → mapa de doctores de CUALQUIER ciudad
     //    (no depende del campo "Entidad", que a veces no coincide con la sede
     //    real de la doctora y provocaba caer al fallback de Usuario Alta).
-    const coordFromProf = a._profHist ? coordFromProfAnyCity(a._profHist) : null;
+    const coordFromProf = a._profHist ? coordFromProfAnyCity(a._profHist, a.fecha) : null;
     // 2) Usuario Alta del cargo → mapa directo de coordinadoras
     const coordFromUser = a._usuarioAlta ? coordFromUsuarioAlta(a._usuarioAlta) : null;
 
@@ -1407,6 +1444,7 @@ function renderExperiencia() {
   const COORD_MAP_SHEET = {
     'viviana sanchez': 'Viviana',
     'viviana':         'Viviana',
+    'mariana':         'Mariana',
     'reyna':           'Reyna',
     'jimena':          'Jimena',
     'lucía':           'Lucy',
