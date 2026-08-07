@@ -613,7 +613,12 @@ const USUARIO_ALTA_MAP = {
   'aranza fuentes':                   'Lucy',
   'judith guadalupe ontiveros diaz':  'Sharon',
   'brenda sanchez':                   'Andrea',
-  'yanelli garcia':                   'Yanelli',
+  // NOTA: "Yanelli García" se quitó de aquí a propósito. En Metepec, ella es
+  // quien captura/da de alta administrativamente casi todos los cargos de la
+  // Dra. Nolazco (72 de 106 en una muestra), pero eso no significa que sea la
+  // coordinadora del caso — los add-ons de Metepec deben ir a Alondra por
+  // defecto (vía el doctor tratante), y el rol de Yanelli se refleja en la
+  // pestaña Administrativo (columna "coordinadora" del sheet de IT), no aquí.
   // PENDIENTE: agregar aquí el nombre completo de Mariana tal como aparece en
   // "Usuario Alta" de los cargos (formato "RFC ( Nombre Completo)"). Sin esto,
   // los add-ons que ella dé de alta y cuyo doctor no se pueda identificar no se
@@ -1454,6 +1459,8 @@ function renderExperiencia() {
     'andrea':          'Andrea',
     'alondra bautista':'Alondra',
     'alondra':         'Alondra',
+    'yanelli garcia':  'Yanelli',
+    'yanelli':         'Yanelli',
   };
   // Excluded: Externo, Híbrido, Valeria
 
