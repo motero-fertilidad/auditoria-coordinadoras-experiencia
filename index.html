@@ -1629,9 +1629,23 @@ function renderExperiencia() {
   show('content-experiencia', true);
 }
 
+// Conceptos que son gratuitos por definición (no se espera que tengan un
+// cargo asociado) — no deben marcarse como "sin cargo" en la auditoría.
+// "Plática de resultados (15)" (también referida como "Px (15)"/"Llamada
+// Px (15 min)") es una llamada corta de 15 min sin costo.
+const CARGO_GRATIS_KW = [
+  'platica de resultados (15)', 'plática de resultados (15)',
+  'llamada px (15', 'px (15)',
+];
+function isCargoGratis(concepto) {
+  const c = normProf(concepto || '');
+  return CARGO_GRATIS_KW.some(k => c.includes(normProf(k)));
+}
+
 // ─── CARGOS (auditoría de cobros) ──────────────────────────────────────────
 // Verifica que toda cita "Terminada" (que no sea un bloque interno de
-// Gestión Administrativa, que no corresponde a una paciente real) tenga al
+// Gestión Administrativa, que no corresponde a una paciente real, ni un
+// concepto gratuito como la plática de resultados de 15 min) tenga al
 // menos un cargo registrado a su nombre en el archivo de Cargos del mismo
 // periodo. El cruce es por nombre de paciente contra TODO el archivo de
 // Cargos (no cita por cita), porque una paciente puede tener varias visitas
@@ -1646,7 +1660,8 @@ function renderCargos() {
 
   const auditadas = state.citas.filter(r =>
     r['Estado'] === 'Terminada' &&
-    r['Grupo de conceptos'] !== 'Gestión Administrativa'
+    r['Grupo de conceptos'] !== 'Gestión Administrativa' &&
+    !isCargoGratis(r['Concepto'])
   );
 
   const auditadasF = filterByCoord(auditadas, 'cargos');
