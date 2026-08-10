@@ -440,10 +440,22 @@
     </div>
     <div class="section" style="margin-top:20px;">
       <div class="sec-head"><div class="sec-title">Pacientes con cita terminada sin cargo</div><span class="pill pill-red" id="pill-sincargo"></span></div>
+      <p style="font-size:12px;color:var(--muted);margin:-4px 0 10px;">Si el cargo ya se hizo (ej. en un periodo anterior, o como parte de un paquete), escribe la razón en la columna de Notas — el caso se moverá automáticamente a "Revisadas" y ya no contará como pendiente.</p>
       <div class="tbl-wrap"><table>
         <thead><tr><th>Fecha</th><th>Paciente</th><th>Ciudad</th><th>Concepto</th><th>Coordinadora</th><th>Notas</th></tr></thead>
         <tbody id="tbody-sincargo"></tbody>
       </table></div>
+    </div>
+    <div class="section" style="margin-top:20px;">
+      <details>
+        <summary style="font-size:12.5px;font-weight:600;color:var(--muted);cursor:pointer;padding:4px 0;">
+          Revisadas con nota (ya no cuentan como pendientes) <span class="pill pill-grey" id="pill-cargo-revisado"></span>
+        </summary>
+        <div class="tbl-wrap" style="margin-top:8px;"><table>
+          <thead><tr><th>Fecha</th><th>Paciente</th><th>Ciudad</th><th>Concepto</th><th>Coordinadora</th><th>Notas</th></tr></thead>
+          <tbody id="tbody-cargo-revisado"></tbody>
+        </table></div>
+      </details>
     </div>
   </div>
 </div>
@@ -1036,6 +1048,15 @@ function notaDiceEnConsulta(paciente, fechaStr, concepto) {
     const v = notas[notaKey(t, paciente, fechaStr, concepto)];
     return v && isEnConsulta(v);
   });
+}
+// Si la coordinadora ya explicó en la nota por qué esta cita "sin cargo" en
+// realidad sí está cubierta (ej. "cargo hecho el mes anterior, incluye esta
+// captura"), la fila se saca de la lista de pendientes — cualquier nota no
+// vacía cuenta como "ya se revisó este caso".
+function notaDiceCargoResuelto(paciente, fechaStr, concepto) {
+  const notas = getNotas();
+  const v = notas[notaKey('sincargo', paciente, fechaStr, concepto)];
+  return !!(v && v.trim());
 }
 
 // Convierte montos en formato es-MX ("1.300,00" -> 1300, punto=miles, coma=decimales)
@@ -1670,12 +1691,19 @@ function renderCargos() {
   const auditadasF = filterByCoord(auditadas, 'cargos');
 
   const tieneCargo = r => cargoNames.has(normName(r['Apellidos, Nombre']));
+  // Una fila "sin cargo" que ya tiene una nota de la coordinadora (ej. "cargo
+  // hecho el mes anterior, incluye esta cita") se considera revisada y ya
+  // no cuenta como pendiente — pero se sigue mostrando, aparte, para que
+  // quede constancia de por qué no aparece como pendiente.
+  const notaResuelta = r => notaDiceCargoResuelto(r['Apellidos, Nombre'], fmtDate(r['Fecha']), r['Concepto']);
   const conCargo = auditadasF.filter(tieneCargo);
-  const sinCargo = auditadasF.filter(r => !tieneCargo(r));
-  const pct = auditadasF.length > 0 ? Math.round(conCargo.length / auditadasF.length * 100) : 0;
+  const sinCargoTodas = auditadasF.filter(r => !tieneCargo(r));
+  const sinCargo = sinCargoTodas.filter(r => !notaResuelta(r));
+  const revisadas = sinCargoTodas.filter(r => notaResuelta(r));
+  const pct = auditadasF.length > 0 ? Math.round((conCargo.length + revisadas.length) / auditadasF.length * 100) : 0;
 
   set('g-total', auditadasF.length);
-  set('g-con', conCargo.length);
+  set('g-con', conCargo.length + revisadas.length);
   set('g-sin', sinCargo.length);
   set('g-pct', auditadasF.length > 0 ? pct + '%' : '—');
 
@@ -1686,7 +1714,7 @@ function renderCargos() {
     const coord = getCoord(r, getCiudad(r));
     if (!coord || !byCoord[coord]) return;
     byCoord[coord].total++;
-    if (tieneCargo(r)) byCoord[coord].con++;
+    if (tieneCargo(r) || notaResuelta(r)) byCoord[coord].con++;
   });
 
   document.getElementById('coord-grid-cargos').innerHTML = COORD_LIST
@@ -1721,6 +1749,30 @@ function renderCargos() {
           ${notaCellHTML('sincargo', r['Apellidos, Nombre'], fechaStr, r['Concepto'])}
         </tr>`;
       }).join('');
+
+  // Revisadas: salieron de "sin cargo" porque la coordinadora ya explicó en
+  // la nota por qué está cubierta (ej. cargo hecho en otro periodo/paquete).
+  // Se muestran aparte para que quede constancia, con la nota visible.
+  const pillRevisadas = document.getElementById('pill-cargo-revisado');
+  if (pillRevisadas) pillRevisadas.textContent = revisadas.length + ' pacientes';
+  const tbodyRevisadas = document.getElementById('tbody-cargo-revisado');
+  if (tbodyRevisadas) {
+    tbodyRevisadas.innerHTML = revisadas.length === 0
+      ? '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px;">Sin casos revisados por nota</td></tr>'
+      : revisadas.map(r => {
+          const coord = getCoord(r, getCiudad(r));
+          const c = getCiudad(r) || '—';
+          const fechaStr = fmtDate(r['Fecha']);
+          return `<tr>
+            <td class="td-muted">${fechaStr}</td>
+            <td class="td-name">${r['Apellidos, Nombre']||'—'}</td>
+            <td><span class="tag tag-${c.toLowerCase()}">${c}</span></td>
+            <td class="td-muted">${r['Concepto']||'—'}</td>
+            <td>${coord ? `<span class="badge b-teal">${coord}</span>` : '—'}</td>
+            ${notaCellHTML('sincargo', r['Apellidos, Nombre'], fechaStr, r['Concepto'])}
+          </tr>`;
+        }).join('');
+  }
 
   show('loading-cargos', false);
   show('content-cargos', true);
@@ -2148,6 +2200,10 @@ try { migrarNotasPlatica(); } catch (e) {}
 
 function notaCambiada(key) {
   const tabla = String(key||'').split('|')[0];
+  if (tabla === 'sincargo') {
+    if (state.citas && state.cargos) renderCargos();
+    return;
+  }
   if (!NOTA_TABLAS_PLATICA.includes(tabla)) return;
   if (state.citas && state.citas.length) { renderPlatica(); renderResumen(); }
 }
