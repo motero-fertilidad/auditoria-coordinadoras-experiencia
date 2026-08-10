@@ -1636,6 +1636,9 @@ function renderExperiencia() {
 const CARGO_GRATIS_KW = [
   'platica de resultados (15)', 'plática de resultados (15)',
   'llamada px (15', 'px (15)',
+  // Consultas de seguimiento/control que no generan cargo aparte
+  'subsecuente', 'seguimiento folicular', 'revision post tratamiento',
+  'muestra espermatica para fiv', 'ultrasonido incluido',
 ];
 function isCargoGratis(concepto) {
   const c = normProf(concepto || '');
