@@ -236,6 +236,7 @@
   <div class="tab"        id="tab-addons"     onclick="showTab('addons')">Add-ons</div>
   <div class="tab"        id="tab-experiencia"onclick="showTab('experiencia')">Administrativo</div>
   <div class="tab"        id="tab-platica"    onclick="showTab('platica')">Plática de Resultados</div>
+  <div class="tab"        id="tab-cargos"     onclick="showTab('cargos')">Cargos</div>
 </div>
 
 <!-- PANEL: RESUMEN -->
@@ -416,6 +417,37 @@
   </div>
 </div>
 
+<!-- PANEL: CARGOS -->
+<div class="panel" id="panel-cargos">
+  <div class="loading-state" id="loading-cargos">
+    <h2>Carga los archivos de Citas y Cargos</h2>
+    <p>Esta auditoría cruza las citas <strong>Terminada</strong> contra el archivo de <strong>Cargos</strong> para detectar pacientes que se atendieron pero no tienen ningún cargo registrado.</p>
+  </div>
+  <div id="content-cargos" style="display:none;">
+    <div class="filter-bar" id="filter-cargos">
+      <label>Coordinadora:</label>
+    </div>
+    <div class="kpi-grid">
+      <div class="kpi-card k-neutral"><div class="kpi-label">Citas terminadas auditadas</div><div class="kpi-num" id="g-total">—</div><div class="kpi-sub">Excluye bloques de Gestión Administrativa</div></div>
+      <div class="kpi-card k-green"><div class="kpi-label">Con cargo registrado</div><div class="kpi-num" id="g-con">—</div><div class="kpi-sub">La paciente tiene al menos un cargo en el periodo</div></div>
+      <div class="kpi-card k-red"><div class="kpi-label">Sin cargo registrado</div><div class="kpi-num" id="g-sin">—</div><div class="kpi-sub">Posible cobro olvidado</div></div>
+      <div class="kpi-card k-amber"><div class="kpi-label">% Cumplimiento</div><div class="kpi-num" id="g-pct">—</div><div class="kpi-sub">Cargos vs. citas terminadas</div></div>
+    </div>
+    <p style="font-size:12px;color:var(--muted);margin:-8px 0 14px;">Nota: el cruce es por nombre de paciente contra todo el archivo de Cargos del periodo (no cargo por cargo contra cada cita individual), así que si una paciente tiene varias visitas facturadas juntas en un solo cargo, no debería salir aquí. Revisa cada caso antes de asumir que faltó cobrar.</p>
+    <div class="section">
+      <div class="sec-head"><div class="sec-title">Por coordinadora · cumplimiento de cargos</div></div>
+      <div class="coord-grid" id="coord-grid-cargos"></div>
+    </div>
+    <div class="section" style="margin-top:20px;">
+      <div class="sec-head"><div class="sec-title">Pacientes con cita terminada sin cargo</div><span class="pill pill-red" id="pill-sincargo"></span></div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Fecha</th><th>Paciente</th><th>Ciudad</th><th>Concepto</th><th>Coordinadora</th><th>Notas</th></tr></thead>
+        <tbody id="tbody-sincargo"></tbody>
+      </table></div>
+    </div>
+  </div>
+</div>
+
 <script>
 // ─── STATE ───────────────────────────────────────────────────────────────────
 const state = { citas_gdl: null, citas_cdmx: null, citas_met: null, cargos: null, sheetIT: null, experiencia: null };
@@ -537,11 +569,11 @@ function coordClinicGroup(coord) {
 }
 
 // activeFilters: conversion stores a clinic label (or null), others store a coord name (or null)
-const activeFilters = { conversion: null, addons: null, experiencia: null, platica: null };
+const activeFilters = { conversion: null, addons: null, experiencia: null, platica: null, cargos: null };
 
 function initFilters() {
   // Conversion has its own hardcoded clinic buttons — skip it here
-  ['addons','experiencia','platica'].forEach(panel => {
+  ['addons','experiencia','platica','cargos'].forEach(panel => {
     const bar = document.getElementById(`filter-${panel}`);
     if (!bar) return;
     bar.innerHTML = '';
@@ -583,6 +615,7 @@ function setFilter(panel, value, clickedBtn) {
   if (panel === 'addons') renderAddons();
   if (panel === 'experiencia') renderExperiencia();
   if (panel === 'platica') renderPlatica();
+  if (panel === 'cargos') renderCargos();
 }
 
 function filterByCoord(rows, panel) {
@@ -1145,6 +1178,7 @@ function renderAll() {
   }
   if (state.sheetIT) renderExperiencia();
   if (state.cargos) renderAddons();
+  if (state.citas && state.cargos) renderCargos();
   if (state.citas || state.cargos) renderResumen();
 }
 
@@ -1593,6 +1627,85 @@ function renderExperiencia() {
 
   show('loading-experiencia', false);
   show('content-experiencia', true);
+}
+
+// ─── CARGOS (auditoría de cobros) ──────────────────────────────────────────
+// Verifica que toda cita "Terminada" (que no sea un bloque interno de
+// Gestión Administrativa, que no corresponde a una paciente real) tenga al
+// menos un cargo registrado a su nombre en el archivo de Cargos del mismo
+// periodo. El cruce es por nombre de paciente contra TODO el archivo de
+// Cargos (no cita por cita), porque una paciente puede tener varias visitas
+// facturadas juntas en un solo cargo — así que esto es una señal para
+// revisar, no una regla exacta de "esta cita específica no se cobró".
+function renderCargos() {
+  if (!state.citas || !state.cargos) return;
+
+  const cargoNames = new Set(
+    state.cargos.map(c => normName(c['Historia'] || ''))
+  );
+
+  const auditadas = state.citas.filter(r =>
+    r['Estado'] === 'Terminada' &&
+    r['Grupo de conceptos'] !== 'Gestión Administrativa'
+  );
+
+  const auditadasF = filterByCoord(auditadas, 'cargos');
+
+  const tieneCargo = r => cargoNames.has(normName(r['Apellidos, Nombre']));
+  const conCargo = auditadasF.filter(tieneCargo);
+  const sinCargo = auditadasF.filter(r => !tieneCargo(r));
+  const pct = auditadasF.length > 0 ? Math.round(conCargo.length / auditadasF.length * 100) : 0;
+
+  set('g-total', auditadasF.length);
+  set('g-con', conCargo.length);
+  set('g-sin', sinCargo.length);
+  set('g-pct', auditadasF.length > 0 ? pct + '%' : '—');
+
+  // By coord
+  const byCoord = {};
+  COORD_LIST.forEach(c => byCoord[c] = {total:0, con:0});
+  auditadasF.forEach(r => {
+    const coord = getCoord(r, getCiudad(r));
+    if (!coord || !byCoord[coord]) return;
+    byCoord[coord].total++;
+    if (tieneCargo(r)) byCoord[coord].con++;
+  });
+
+  document.getElementById('coord-grid-cargos').innerHTML = COORD_LIST
+    .filter(c => byCoord[c].total > 0)
+    .map(c => {
+      const {total, con} = byCoord[c];
+      const p = total > 0 ? Math.round(con / total * 100) : 0;
+      const cls = p >= 90 ? 'cc-green' : p >= 70 ? 'cc-amber' : 'cc-red';
+      return `<div class="coord-card ${cls}">
+        <div class="coord-name">${c}</div>
+        <div class="coord-stat"><span class="cs-lbl">Citas terminadas auditadas</span><span class="cs-val">${total}</span></div>
+        <div class="coord-stat"><span class="cs-lbl">Con cargo</span><span class="cs-val v-green">${con}</span></div>
+        <div class="coord-stat"><span class="cs-lbl">Sin cargo</span><span class="cs-val ${total-con>0?'v-red':''}">${total-con}</span></div>
+        <div class="coord-stat"><span class="cs-lbl">% Cumplimiento</span><span class="cs-val ${cls==='cc-green'?'v-green':cls==='cc-amber'?'v-amber':'v-red'}">${p}%</span></div>
+      </div>`;
+    }).join('');
+
+  document.getElementById('pill-sincargo').textContent = sinCargo.length + ' pacientes';
+
+  document.getElementById('tbody-sincargo').innerHTML = sinCargo.length === 0
+    ? '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px;">Todas las citas terminadas tienen cargo registrado ✔</td></tr>'
+    : sinCargo.map(r => {
+        const coord = getCoord(r, getCiudad(r));
+        const c = getCiudad(r) || '—';
+        const fechaStr = fmtDate(r['Fecha']);
+        return `<tr>
+          <td class="td-muted">${fechaStr}</td>
+          <td class="td-name">${r['Apellidos, Nombre']||'—'}</td>
+          <td><span class="tag tag-${c.toLowerCase()}">${c}</span></td>
+          <td class="td-muted">${r['Concepto']||'—'}</td>
+          <td>${coord ? `<span class="badge b-teal">${coord}</span>` : '—'}</td>
+          ${notaCellHTML('sincargo', r['Apellidos, Nombre'], fechaStr, r['Concepto'])}
+        </tr>`;
+      }).join('');
+
+  show('loading-cargos', false);
+  show('content-cargos', true);
 }
 
 // ─── PLÁTICA DE RESULTADOS ────────────────────────────────────────────────────
@@ -2192,6 +2305,7 @@ function renderAll() {
   if (state.citas) { renderConversion(); renderPlatica(); }
   if (state.sheetIT) renderExperiencia();
   if (state.cargos) renderAddons();
+  if (state.citas && state.cargos) renderCargos();
 }
 
 
