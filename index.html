@@ -352,10 +352,22 @@
     </div>
     <div class="section" style="margin-top:20px;">
       <div class="sec-head"><div class="sec-title">Pacientes con expediente incompleto</div><span class="pill pill-red" id="pill-incompleto"></span></div>
+      <p style="font-size:12px;color:var(--muted);margin:-4px 0 10px;">Si el dato en realidad sí está (ej. "ya tiene CP"), escribe la razón en Notas — el caso se moverá automáticamente a "Revisados" y contará como completo.</p>
       <div class="tbl-wrap"><table>
         <thead><tr><th>Paciente</th><th>Coordinadora</th><th>Demog</th><th>Contacto</th><th>CP</th><th>Clasificación</th><th>Factura</th><th>Observaciones</th><th>Notas</th></tr></thead>
         <tbody id="tbody-incompleto"></tbody>
       </table></div>
+    </div>
+    <div class="section" style="margin-top:20px;">
+      <details>
+        <summary style="font-size:12.5px;font-weight:600;color:var(--muted);cursor:pointer;padding:4px 0;">
+          Revisados por nota (cuentan como completos) <span class="pill pill-grey" id="pill-incompleto-revisado"></span>
+        </summary>
+        <div class="tbl-wrap" style="margin-top:8px;"><table>
+          <thead><tr><th>Paciente</th><th>Coordinadora</th><th>Demog</th><th>Contacto</th><th>CP</th><th>Clasificación</th><th>Factura</th><th>Observaciones</th><th>Notas</th></tr></thead>
+          <tbody id="tbody-incompleto-revisado"></tbody>
+        </table></div>
+      </details>
     </div>
   </div>
 </div>
@@ -633,15 +645,20 @@ function setFilter(panel, value, clickedBtn) {
 function filterByCoord(rows, panel) {
   const value = activeFilters[panel];
   if (!value) return rows;
+  // Cargos usa el doctor tratante (Profesional Historia), no quien agendó
+  // la cita puntual — ver getCoordByHistoria.
+  const resolver = panel === 'cargos'
+    ? (r => getCoordByHistoria(r, getCiudad(r)))
+    : (r => getCoord(r, getCiudad(r)));
   if (panel === 'conversion') {
     // Filter by clinic — include all coords belonging to that clinic
     const group = CLINIC_GROUPS.find(g => g.label === value);
     if (!group) return rows;
     const groupCoords = new Set(group.coords);
-    return rows.filter(r => groupCoords.has(getCoord(r, getCiudad(r))));
+    return rows.filter(r => groupCoords.has(resolver(r)));
   }
   // Other panels: filter by individual coordinator
-  return rows.filter(r => getCoord(r, getCiudad(r)) === value);
+  return rows.filter(r => resolver(r) === value);
 }
 
 function normProf(p) {
@@ -757,6 +774,34 @@ function getCoord(row, cityOverride) {
   if (usuarioAlias) return usuarioAlias;
 
   return null;
+}
+
+// Coordinadora a partir del doctor TRATANTE (Profesional Historia), sin
+// importar quién creó/agendó la cita puntual (Usuario Crea) ni quién hizo el
+// procedimiento ese día. Se usa en la pestaña de Cargos, donde lo que
+// importa es de qué doctora es la paciente en su historia clínica, no quién
+// generó esta cita en particular (ej. Graves, Forrest Michael es paciente
+// del Dr. Armando Roque → Jimena, aunque Reyna haya agendado su ED).
+function getCoordByHistoria(row, cityOverride) {
+  const raw = row['Profesional Historia'] || row['Profesional'] || '';
+  const prof = normProf(raw);
+  if (!prof) return null;
+  const city = cityOverride || getCiudad(row);
+  const fecha = fechaDeFila(row);
+  const map = city === 'GDL' ? mapaGDL(fecha)
+             : city === 'CDMX' ? DOCTOR_COORD_CDMX
+             : city === 'MET' ? DOCTOR_COORD_MET
+             : {};
+  for (const [doctor, coord] of Object.entries(map)) {
+    if (prof.includes(normProf(doctor))) return coord;
+  }
+  // Fallback: buscar al doctor en el mapa de TODAS las ciudades, por si la
+  // ciudad detectada no coincide con la sede real de la doctora.
+  const fromAnyCity = coordFromProfAnyCity(raw, fecha);
+  if (fromAnyCity) return fromAnyCity;
+  // Último recurso: alias corto de la propia coordinadora en el campo
+  // (ej. ella misma aparece como Profesional Historia).
+  return matchCoordAlias(prof);
 }
 
 // Legacy - kept for sheet IT compatibility
@@ -1585,8 +1630,22 @@ function renderExperiencia() {
     return true;
   });
 
-  const completo = audited.filter(r => isComplete(r));
-  const incompleto = audited.filter(r => !isComplete(r));
+  // Si la coordinadora escribió una nota explicando que el dato SÍ está
+  // (ej. "ya tiene CP", "se corrigió, sí tiene clasificación"), el
+  // expediente se saca de "incompleto" y cuenta como completo — igual que
+  // en la pestaña de Cargos, cualquier nota no vacía se toma como que ya
+  // se revisó el caso.
+  function notaResuelveIncompleto(paciente, dia_cita) {
+    const notas = getNotas();
+    const v = notas[notaKey('incompleto', paciente, dia_cita, null)];
+    return !!(v && v.trim());
+  }
+
+  const completoBase = audited.filter(r => isComplete(r));
+  const incompletoTodos = audited.filter(r => !isComplete(r));
+  const incompleto = incompletoTodos.filter(r => !notaResuelveIncompleto(r['paciente'], r['dia_cita']));
+  const revisadosPorNota = incompletoTodos.filter(r => notaResuelveIncompleto(r['paciente'], r['dia_cita']));
+  const completo = [...completoBase, ...revisadosPorNota];
   const pct = audited.length > 0 ? Math.round(completo.length / audited.length * 100) : 0;
 
   set('e-total', audited.length);
@@ -1601,7 +1660,7 @@ function renderExperiencia() {
     const coord = getCoordFromSheet(r);
     if (!coord || !byCoord[coord]) return;
     byCoord[coord].total++;
-    if (isComplete(r)) byCoord[coord].completo++;
+    if (isComplete(r) || notaResuelveIncompleto(r['paciente'], r['dia_cita'])) byCoord[coord].completo++;
   });
 
   document.getElementById('coord-grid-exp').innerHTML = COORD_LIST
@@ -1642,6 +1701,34 @@ function renderExperiencia() {
           ${notaCellHTML('incompleto', r['paciente'], r['dia_cita'], null)}
         </tr>`;
       }).join('');
+
+  // Revisados por nota: la coordinadora ya explicó por qué el dato SÍ está,
+  // aunque el sheet de IT diga que no — se muestran aparte, con su nota.
+  const pillRevisadosExp = document.getElementById('pill-incompleto-revisado');
+  if (pillRevisadosExp) pillRevisadosExp.textContent = revisadosPorNota.length + ' pacientes';
+  const tbodyRevisadosExp = document.getElementById('tbody-incompleto-revisado');
+  if (tbodyRevisadosExp) {
+    tbodyRevisadosExp.innerHTML = revisadosPorNota.length === 0
+      ? '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:16px;">Sin casos revisados por nota</td></tr>'
+      : revisadosPorNota.map(r => {
+          const coord = getCoordFromSheet(r);
+          const badge = v => isSi(v)
+            ? `<span class="badge b-green">Sí</span>`
+            : `<span class="badge b-red">No</span>`;
+          const obs = getObservaciones(r);
+          return `<tr>
+            <td class="td-name">${r['paciente'] || '—'}</td>
+            <td>${coord ? `<span class="badge b-teal">${coord}</span>` : '—'}</td>
+            <td>${badge(r['demog'])}</td>
+            <td>${badge(r['contacto'])}</td>
+            <td>${badge(r['CP'])}</td>
+            <td>${badge(r['clasificacion'] || r['clasificación'])}</td>
+            <td>${badge(r['f_emitida'])}</td>
+            <td style="min-width:160px;max-width:280px;white-space:normal;word-break:break-word;color:var(--muted);font-size:11px;" title="${obs}">${obs || '—'}</td>
+            ${notaCellHTML('incompleto', r['paciente'], r['dia_cita'], null)}
+          </tr>`;
+        }).join('');
+  }
 
   document.getElementById('sheet-status').innerHTML =
     `<span style="color:var(--green-mid)">✔ ${audited.length} pacientes auditados · ${incompleto.length} con expediente incompleto</span>`;
@@ -1711,7 +1798,7 @@ function renderCargos() {
   const byCoord = {};
   COORD_LIST.forEach(c => byCoord[c] = {total:0, con:0});
   auditadasF.forEach(r => {
-    const coord = getCoord(r, getCiudad(r));
+    const coord = getCoordByHistoria(r, getCiudad(r));
     if (!coord || !byCoord[coord]) return;
     byCoord[coord].total++;
     if (tieneCargo(r) || notaResuelta(r)) byCoord[coord].con++;
@@ -1737,7 +1824,7 @@ function renderCargos() {
   document.getElementById('tbody-sincargo').innerHTML = sinCargo.length === 0
     ? '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px;">Todas las citas terminadas tienen cargo registrado ✔</td></tr>'
     : sinCargo.map(r => {
-        const coord = getCoord(r, getCiudad(r));
+        const coord = getCoordByHistoria(r, getCiudad(r));
         const c = getCiudad(r) || '—';
         const fechaStr = fmtDate(r['Fecha']);
         return `<tr>
@@ -1760,7 +1847,7 @@ function renderCargos() {
     tbodyRevisadas.innerHTML = revisadas.length === 0
       ? '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px;">Sin casos revisados por nota</td></tr>'
       : revisadas.map(r => {
-          const coord = getCoord(r, getCiudad(r));
+          const coord = getCoordByHistoria(r, getCiudad(r));
           const c = getCiudad(r) || '—';
           const fechaStr = fmtDate(r['Fecha']);
           return `<tr>
@@ -2202,6 +2289,10 @@ function notaCambiada(key) {
   const tabla = String(key||'').split('|')[0];
   if (tabla === 'sincargo') {
     if (state.citas && state.cargos) renderCargos();
+    return;
+  }
+  if (tabla === 'incompleto') {
+    if (state.sheetIT) renderExperiencia();
     return;
   }
   if (!NOTA_TABLAS_PLATICA.includes(tabla)) return;
