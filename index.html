@@ -954,6 +954,14 @@ const NO_ESTUDIO_KW = [
   'no se tomara ham','no se tomará ham','no se tomara amh','no se tomará amh',
   'sin ham','sin amh','sin estudio','sin estudios','no se le tomo ham','no se le tomó ham',
   'no se le tomo amh','no se le tomó amh','no lleva ham','no lleva amh',
+  // Variantes genéricas de "no aplica" / "no se hizo el estudio" que no
+  // mencionan HAM/AMH/ED explícitamente por su nombre.
+  'no aplica platica de resultados', 'no aplica la platica de resultados',
+  'no aplica plática de resultados', 'no aplica la plática de resultados',
+  'no aplica',
+  'no se hizo estudios','no se hicieron estudios','no se hizo el estudio','no se hizo estudio',
+  'no se tomo estudios','no se tomó estudios','no se tomaron estudios',
+  'no se tomo el estudio','no se tomó el estudio','no se tomo los estudios','no se tomó los estudios',
 ];
 
 // Internal professionals by city (for isExternal filter)
@@ -1079,6 +1087,22 @@ function esEntregadoEnConsulta(row, obs, fechaStr) {
   if (isEnConsulta(obs)) return true;
   if (MANUAL_EN_CONSULTA_SET.has(normName(row['Apellidos, Nombre']))) return true;
   return notaDiceEnConsulta(row['Apellidos, Nombre'], fechaStr, row['Concepto']);
+}
+// Busca en las notas guardadas de este paciente algo que indique que la
+// plática "no aplica" (ej. la coordinadora escribió "No aplica" o "no se
+// tomaron estudios" en la columna de Notas) — mismo mecanismo que
+// notaDiceEnConsulta, para que escribir la nota mueva al paciente a la
+// sección correcta sin tener que editar el archivo de citas.
+function notaDiceNoAplica(paciente, fechaStr, concepto) {
+  const notas = getNotas();
+  return NOTA_TABLAS_PLATICA.some(t => {
+    const v = notas[notaKey(t, paciente, fechaStr, concepto)];
+    return v && noAplicaEstudio(v);
+  });
+}
+function esNoAplicaEstudio(row, obs, fechaStr) {
+  if (noAplicaEstudio(obs)) return true;
+  return notaDiceNoAplica(row['Apellidos, Nombre'], fechaStr, row['Concepto']);
 }
 // Busca en las notas guardadas de este paciente (en cualquiera de las tablas de
 // plática) algo que indique entrega en consulta.
@@ -1909,7 +1933,7 @@ function computePlatica(rows, coordFilter) {
     const tienePlatica = platicaNames.has(name);
 
     let status;
-    if (noAplicaEstudio(obs) && !tienePlatica) status = 'no_aplica';
+    if (esNoAplicaEstudio(r, obs, fechaStr) && !tienePlatica) status = 'no_aplica';
     else if (enConsulta) status = 'en_consulta';
     else if (noContesta) status = 'no_contesta';
     else if (tienePlatica) status = 'completa';
