@@ -201,6 +201,7 @@
     <span class="week-badge" id="week-badge">Cargando...</span>
     <span id="load-status" style="font-size:11px;color:#888;"></span>
     <button class="upload-btn" style="background:#059669;" onclick="guardarSemana()" title="Guardar snapshot de esta semana">💾 Guardar semana</button>
+    <button class="upload-btn" style="background:#0891b2;" onclick="sincronizarNotasDesdeNube(true)" title="Traer las notas más recientes que hayan escrito otras coordinadoras">🔄 Actualizar notas</button>
     <button class="upload-btn" style="background:#7c3aed;" onclick="toggleHistorial()" title="Ver semanas guardadas">🕐 Historial</button>
     <button class="upload-btn" onclick="document.getElementById('file-citas-gdl').click()" title="Reemplazar manualmente">📂 Citas GDL</button>
     <button class="upload-btn" onclick="document.getElementById('file-citas-cdmx').click()" title="Reemplazar manualmente">📂 Citas CDMX</button>
@@ -1771,6 +1772,11 @@ const CARGO_GRATIS_KW = [
   // Consultas de seguimiento/control que no generan cargo aparte
   'subsecuente', 'seguimiento folicular', 'revision post tratamiento',
   'muestra espermatica para fiv', 'ultrasonido incluido',
+  // Citas de "inicio de..." — el cargo del tratamiento/paquete ya se hizo
+  // antes, esta cita solo marca el arranque del ciclo
+  'inicio de tratamiento', 'inicio tratamiento',
+  'inicio de preparacion endometrial', 'inicio preparacion endometrial',
+  'inicio de estimulacion ovarica', 'inicio estimulacion ovarica',
 ];
 function isCargoGratis(concepto) {
   const c = normProf(concepto || '');
@@ -2247,17 +2253,26 @@ async function autoLoadFromGitHub() {
 
 window.addEventListener('load', () => {
   initFilters();
-  autoLoadFromGitHub();
+  autoLoadFromGitHub().then(() => sincronizarNotasDesdeNube(false));
 });
 
 // ─── HISTORIAL ────────────────────────────────────────────────────────────────
-// ─── NOTAS POR FILA (persistentes en localStorage) ────────────────────────────
+// ─── NOTAS POR FILA (compartidas vía Google Sheet + caché local) ─────────────
 // Cada tabla de pacientes tiene una columna "Notas" editable para que las
 // coordinadoras dejen comentarios libres (ej. "ya se le llamó", "confirmar
-// con doctor"). Se guardan localmente en el navegador, por fila — la llave
-// combina la tabla + paciente + fecha + concepto para no mezclar notas de
-// contextos distintos del mismo paciente.
+// con doctor"). Se guardan localmente en el navegador (para que la UI
+// responda al instante) Y además se sincronizan con una Google Sheet
+// compartida a través de un Apps Script Web App, para que todas las
+// coordinadoras vean las mismas notas sin importar en qué computadora
+// entren. La llave combina tabla + paciente + fecha + concepto para no
+// mezclar notas de contextos distintos del mismo paciente.
 const NOTES_KEY = 'fi_auditoria_notas';
+
+// URL del Apps Script Web App que lee/escribe las notas en la Google Sheet
+// compartida. Mientras esté vacía, las notas funcionan solo localmente
+// (como antes) — en cuanto se despliegue el Web App, se pega aquí la URL
+// que termina en "/exec".
+const NOTES_SYNC_URL = 'https://script.google.com/macros/s/AKfycbyOov0u7RaDrn9Rz_NP5O10Muk-mQIdGLnTSZoWVq4WzAY82ySdL-cxb-CYu_9M1ry_Kw/exec';
 
 function getNotas() {
   try { return JSON.parse(localStorage.getItem(NOTES_KEY) || '{}'); }
@@ -2274,6 +2289,52 @@ function guardarNota(key, valor) {
   else delete notas[key];
   try { localStorage.setItem(NOTES_KEY, JSON.stringify(notas)); }
   catch (e) { alert('No se pudo guardar la nota: el almacenamiento local del navegador está lleno.'); }
+  enviarNotaANube(key, valor);
+}
+
+// Envía la nota a la Google Sheet compartida. Se hace en segundo plano — si
+// falla (sin internet, Web App no configurado, etc.) la nota sigue guardada
+// localmente y no se interrumpe a la coordinadora con un error.
+function enviarNotaANube(key, valor) {
+  if (!NOTES_SYNC_URL) return;
+  fetch(NOTES_SYNC_URL, {
+    method: 'POST',
+    // text/plain evita el preflight CORS que Apps Script no maneja bien.
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify({ key, valor: valor || '' }),
+  }).catch(e => console.warn('No se pudo guardar la nota en la nube:', e.message));
+}
+
+// Descarga todas las notas guardadas por cualquier coordinadora en la
+// Google Sheet compartida y las combina con las locales (por si hay notas
+// escritas sin conexión que aún no se subieron). Se llama al cargar la
+// página y desde el botón "Actualizar notas".
+let sincronizandoNotas = false;
+async function sincronizarNotasDesdeNube(mostrarAlerta) {
+  if (!NOTES_SYNC_URL) {
+    if (mostrarAlerta) alert('Todavía no se ha conectado el almacenamiento compartido de notas (falta configurar NOTES_SYNC_URL).');
+    return;
+  }
+  if (sincronizandoNotas) return;
+  sincronizandoNotas = true;
+  try {
+    const res = await fetch(NOTES_SYNC_URL, { method: 'GET', cache: 'no-cache' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const remoteNotas = await res.json();
+    const localNotas = getNotas();
+    const merged = { ...localNotas, ...remoteNotas };
+    localStorage.setItem(NOTES_KEY, JSON.stringify(merged));
+    if (state.citas && state.citas.length) renderPlatica();
+    if (state.sheetIT) renderExperiencia();
+    if (state.citas && state.cargos) renderCargos();
+    if (state.cargos) renderAddons();
+    if (mostrarAlerta) alert('Notas actualizadas ✔');
+  } catch (e) {
+    console.warn('No se pudo sincronizar notas con la nube:', e.message);
+    if (mostrarAlerta) alert('No se pudo conectar con el almacenamiento compartido de notas. Revisa tu conexión o vuelve a intentar.');
+  } finally {
+    sincronizandoNotas = false;
+  }
 }
 
 // Escapa comillas para poder meter el valor dentro del atributo value="...".
