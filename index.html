@@ -203,16 +203,6 @@
     <button class="upload-btn" style="background:#059669;" onclick="guardarSemana()" title="Guardar snapshot de esta semana">💾 Guardar semana</button>
     <button class="upload-btn" style="background:#0891b2;" onclick="sincronizarNotasDesdeNube(true)" title="Traer las notas más recientes que hayan escrito otras coordinadoras">🔄 Actualizar notas</button>
     <button class="upload-btn" style="background:#7c3aed;" onclick="toggleHistorial()" title="Ver semanas guardadas">🕐 Historial</button>
-    <button class="upload-btn" onclick="document.getElementById('file-citas-gdl').click()" title="Reemplazar manualmente">📂 Citas GDL</button>
-    <button class="upload-btn" onclick="document.getElementById('file-citas-cdmx').click()" title="Reemplazar manualmente">📂 Citas CDMX</button>
-    <button class="upload-btn" onclick="document.getElementById('file-citas-met').click()" title="Reemplazar manualmente">📂 Citas MET</button>
-    <button class="upload-btn" onclick="document.getElementById('file-cargos').click()" title="Reemplazar manualmente">📂 Cargos</button>
-    <button class="upload-btn" style="background:#2563eb;" onclick="document.getElementById('file-experiencia').click()" title="Reemplazar manualmente">📂 Experiencia</button>
-    <input type="file" id="file-citas-gdl" class="file-input" accept=".xlsx,.xls,.txt,.tsv" onchange="loadFile(this,'citas_gdl')">
-    <input type="file" id="file-citas-cdmx" class="file-input" accept=".xlsx,.xls,.txt,.tsv" onchange="loadFile(this,'citas_cdmx')">
-    <input type="file" id="file-citas-met" class="file-input" accept=".xlsx,.xls,.txt,.tsv" onchange="loadFile(this,'citas_met')">
-    <input type="file" id="file-cargos" class="file-input" accept=".xlsx,.xls,.txt,.tsv" onchange="loadFile(this,'cargos')">
-    <input type="file" id="file-experiencia" class="file-input" accept=".xlsx,.xls,.csv" onchange="loadFile(this,'experiencia')">
     <input type="file" id="file-snapshot" class="file-input" accept=".json" onchange="importarSnapshot(this)">
   </div>
 </div>
