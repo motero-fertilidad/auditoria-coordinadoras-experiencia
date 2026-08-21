@@ -1773,6 +1773,19 @@ function isCargoGratis(concepto) {
   return CARGO_GRATIS_KW.some(k => c.includes(normProf(k)));
 }
 
+// Si en Observaciones la coordinadora anotó que NO se cobra, que está
+// incluido en otro procedimiento, o que fue gratis (ej. "NO COBRAR", "ED
+// Incluido en check up de pareja", "HAM Incluida en check up", "GRATIS
+// evento Luaa"), esa cita no debe salir como pendiente de cobro. "no
+// incluido/incluida" es la negación y NO cuenta como gratis.
+const OBS_GRATIS_KW = ['no cobrar', 'no cobrarle', 'incluido', 'incluida', 'gratis'];
+const NEG_INCLUIDO_RE = /\bno\s+(esta\s+|está\s+)?incluid[oa]\b/g;
+function obsIndicaGratis(obs) {
+  let o = normProf(String(obs == null ? '' : obs));
+  o = o.replace(NEG_INCLUIDO_RE, ' ');
+  return OBS_GRATIS_KW.some(k => o.includes(normProf(k)));
+}
+
 // ─── CARGOS (auditoría de cobros) ──────────────────────────────────────────
 // Verifica que toda cita "Terminada" (que no sea un bloque interno de
 // Gestión Administrativa, que no corresponde a una paciente real, ni un
@@ -1792,7 +1805,8 @@ function renderCargos() {
   const auditadas = state.citas.filter(r =>
     r['Estado'] === 'Terminada' &&
     r['Grupo de conceptos'] !== 'Gestión Administrativa' &&
-    !isCargoGratis(r['Concepto'])
+    !isCargoGratis(r['Concepto']) &&
+    !obsIndicaGratis(r['Obs.'])
   );
 
   const auditadasF = filterByCoord(auditadas, 'cargos');
