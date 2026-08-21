@@ -524,9 +524,9 @@ const DOCTOR_COORD_CDMX = {
   'jaime antonio hidalgo carrera':'Reyna',
   'giovanni lopez salamanca':     'Reyna',
   'giovanni lópez salamanca':     'Reyna',
-  'miranda lucia moran morales':  'Andrea',
-  'miranda lucía morán morales':  'Andrea',
-  'alma victoria villarreal barranca': 'Andrea',
+  'miranda lucia moran morales':  'Jacqueline',
+  'miranda lucía morán morales':  'Jacqueline',
+  'alma victoria villarreal barranca': 'Jacqueline',
   'jairo hernando pedraza pinto': 'Lucy',
   'monica olavarria':             'Lucy',
   'mónica olavarria':             'Lucy',
@@ -538,12 +538,12 @@ const DOCTOR_COORD_MET = {
   'guadalupe nolazco': 'Alondra',
 };
 
-const COORD_LIST = ['Viviana','Mariana','Reyna','Jimena','Lucy','Sharon','Andrea','Alondra','Yanelli'];
+const COORD_LIST = ['Viviana','Mariana','Reyna','Jimena','Lucy','Sharon','Jacqueline','Alondra','Yanelli'];
 
 // Agrupación de coordinadoras por clínica (para filtros y vista de Conversión)
 const CLINIC_GROUPS = [
   { label: 'GDL',  coords: ['Viviana', 'Mariana'] },
-  { label: 'CDMX', coords: ['Sharon', 'Reyna', 'Lucy', 'Jimena', 'Andrea'] },
+  { label: 'CDMX', coords: ['Sharon', 'Reyna', 'Lucy', 'Jimena', 'Jacqueline'] },
   { label: 'MTP',  coords: ['Yanelli', 'Alondra'] },
 ];
 
@@ -559,7 +559,7 @@ const COORD_NAME_ALIASES = {
   'lucy':     'Lucy',
   'lucia':    'Lucy',
   'sharon':   'Sharon',
-  'andrea':   'Andrea',
+  'jacqueline':   'Jacqueline',
   'alondra':  'Alondra',
   'yanelli':  'Yanelli',
 };
@@ -665,7 +665,7 @@ const USUARIO_ALTA_MAP = {
   'jazmin gaitan':                    'Jimena',
   'aranza fuentes':                   'Lucy',
   'judith guadalupe ontiveros diaz':  'Sharon',
-  'brenda sanchez':                   'Andrea',
+  'brenda sanchez':                   'Jacqueline',
   // NOTA: "Yanelli García" se quitó de aquí a propósito. En Metepec, ella es
   // quien captura/da de alta administrativamente casi todos los cargos de la
   // Dra. Nolazco (72 de 106 en una muestra), pero eso no significa que sea la
@@ -730,7 +730,7 @@ function getCoord(row, cityOverride) {
   //    aparecer en "Usuario Crea" cuando ella misma generó el registro.
   //    Se revisa antes que los alias cortos porque un nombre completo es
   //    más específico (evita, ej., confundir a "Miranda Lucía Morán
-  //    Morales" —doctora de Andrea— con la coordinadora "Lucy").
+  //    Morales" —doctora de Jacqueline— con la coordinadora "Lucy").
   const usuario = normProf(row['Usuario Crea'] || '');
   let coordFromUsuarioDoctor = null;
   if (usuario) {
@@ -805,7 +805,7 @@ function normalizeCoord(raw) {
   }
   // fallback name-based
   const nameMap = {'viviana':'Viviana','reyna':'Reyna','jimena':'Jimena',
-    'lucy':'Lucy','lucia':'Lucy','sharon':'Sharon','andrea':'Andrea'};
+    'lucy':'Lucy','lucia':'Lucy','sharon':'Sharon','jacqueline':'Jacqueline'};
   for (const [key, name] of Object.entries(nameMap)) {
     if (r.includes(key)) return name;
   }
@@ -1571,7 +1571,7 @@ function renderExperiencia() {
     'lucia':           'Lucy',
     'lucy':            'Lucy',
     'sharon':          'Sharon',
-    'andrea':          'Andrea',
+    'jacqueline':          'Jacqueline',
     'alondra bautista':'Alondra',
     'alondra':         'Alondra',
     'yanelli garcia':  'Yanelli',
