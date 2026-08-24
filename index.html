@@ -1752,16 +1752,21 @@ function renderExperiencia() {
   show('content-experiencia', true);
 }
 
-// Conceptos que son gratuitos por definición (no se espera que tengan un
-// cargo asociado) — no deben marcarse como "sin cargo" en la auditoría.
+// Conceptos que estructuralmente NUNCA generan un cargo propio (no es que
+// tengan descuento — simplemente no existe un cargo para ellos en Vrepro),
+// así que no deben marcarse como "sin cargo" en la auditoría.
 // "Plática de resultados (15)" (también referida como "Px (15)"/"Llamada
 // Px (15 min)") es una llamada corta de 15 min sin costo.
+// IMPORTANTE: los casos marcados como "incluido/incluida" o "gratis" en el
+// Concepto o en Observaciones SÍ deben tener un cargo — solo que con 100%
+// de descuento. Por eso ya NO se excluyen aquí; si no tienen cargo (aunque
+// sea de $0), deben seguir apareciendo como pendientes.
 const CARGO_GRATIS_KW = [
   'platica de resultados (15)', 'plática de resultados (15)',
   'llamada px (15', 'px (15)',
   // Consultas de seguimiento/control que no generan cargo aparte
   'subsecuente', 'seguimiento folicular', 'revision post tratamiento',
-  'muestra espermatica para fiv', 'ultrasonido incluido',
+  'muestra espermatica para fiv', 'muestra espermatica para inseminacion',
   // Citas de "inicio de..." — el cargo del tratamiento/paquete ya se hizo
   // antes, esta cita solo marca el arranque del ciclo
   'inicio de tratamiento', 'inicio tratamiento',
@@ -1771,19 +1776,6 @@ const CARGO_GRATIS_KW = [
 function isCargoGratis(concepto) {
   const c = normProf(concepto || '');
   return CARGO_GRATIS_KW.some(k => c.includes(normProf(k)));
-}
-
-// Si en Observaciones la coordinadora anotó que NO se cobra, que está
-// incluido en otro procedimiento, o que fue gratis (ej. "NO COBRAR", "ED
-// Incluido en check up de pareja", "HAM Incluida en check up", "GRATIS
-// evento Luaa"), esa cita no debe salir como pendiente de cobro. "no
-// incluido/incluida" es la negación y NO cuenta como gratis.
-const OBS_GRATIS_KW = ['no cobrar', 'no cobrarle', 'incluido', 'incluida', 'gratis'];
-const NEG_INCLUIDO_RE = /\bno\s+(esta\s+|está\s+)?incluid[oa]\b/g;
-function obsIndicaGratis(obs) {
-  let o = normProf(String(obs == null ? '' : obs));
-  o = o.replace(NEG_INCLUIDO_RE, ' ');
-  return OBS_GRATIS_KW.some(k => o.includes(normProf(k)));
 }
 
 // ─── CARGOS (auditoría de cobros) ──────────────────────────────────────────
@@ -1805,8 +1797,7 @@ function renderCargos() {
   const auditadas = state.citas.filter(r =>
     r['Estado'] === 'Terminada' &&
     r['Grupo de conceptos'] !== 'Gestión Administrativa' &&
-    !isCargoGratis(r['Concepto']) &&
-    !obsIndicaGratis(r['Obs.'])
+    !isCargoGratis(r['Concepto'])
   );
 
   const auditadasF = filterByCoord(auditadas, 'cargos');
