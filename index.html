@@ -196,7 +196,7 @@
     <div class="fi-logo">FI</div>
     <div class="nav-title">
       <h1>Auditoría · Coordinadoras de Experiencia</h1>
-      <p>Fertilidad Integral · GDL y CDMX <span style="opacity:.55;">· v2026.08.05</span></p>
+      <p>Fertilidad Integral · GDL, CDMX y MTP <span style="opacity:.55;">· v2026.08.24b · ventana de cargos</span></p>
     </div>
   </div>
   <div class="nav-right">
@@ -427,39 +427,102 @@
 <div class="panel" id="panel-cargos">
   <div class="loading-state" id="loading-cargos">
     <h2>Carga los archivos de Citas y Cargos</h2>
-    <p>Esta auditoría cruza las citas <strong>Terminada</strong> contra el archivo de <strong>Cargos</strong> para detectar pacientes que se atendieron pero no tienen ningún cargo registrado.</p>
+    <p>Esta auditoría cruza <strong>cada cita terminada</strong> contra el archivo de <strong>Cargos</strong> para detectar citas que se atendieron sin cargo propio dentro de la ventana. Incluye consultas subsecuentes, seguimientos e inicios de tratamiento y médicos externos (EX).</p>
   </div>
   <div id="content-cargos" style="display:none;">
     <div class="filter-bar" id="filter-cargos">
       <label>Coordinadora:</label>
     </div>
-    <div class="kpi-grid">
-      <div class="kpi-card k-neutral"><div class="kpi-label">Citas terminadas auditadas</div><div class="kpi-num" id="g-total">—</div><div class="kpi-sub">Excluye bloques de Gestión Administrativa</div></div>
-      <div class="kpi-card k-green"><div class="kpi-label">Con cargo registrado</div><div class="kpi-num" id="g-con">—</div><div class="kpi-sub">La paciente tiene al menos un cargo en el periodo</div></div>
-      <div class="kpi-card k-red"><div class="kpi-label">Sin cargo registrado</div><div class="kpi-num" id="g-sin">—</div><div class="kpi-sub">Posible cobro olvidado</div></div>
-      <div class="kpi-card k-amber"><div class="kpi-label">% Cumplimiento</div><div class="kpi-num" id="g-pct">—</div><div class="kpi-sub">Cargos vs. citas terminadas</div></div>
+
+    <!-- Controles de la ventana de cargos. Van en su propio contenedor porque
+         initFilters() reescribe el innerHTML de #filter-cargos. -->
+    <div class="filter-bar" id="cargos-controls" style="flex-wrap:wrap;">
+      <label>Ventana de cargo:</label>
+      <button class="filter-btn" data-win="0"   onclick="setVentana(0,this)">Mismo día</button>
+      <button class="filter-btn" data-win="3"   onclick="setVentana(3,this)">± 3 días</button>
+      <button class="filter-btn active" data-win="7" onclick="setVentana(7,this)">± 7 días</button>
+      <button class="filter-btn" data-win="15"  onclick="setVentana(15,this)">± 15 días</button>
+      <button class="filter-btn" data-win="999" onclick="setVentana(999,this)">Todo el periodo</button>
+      <span class="filter-sep">Reglas</span>
+      <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:var(--muted);cursor:pointer;">
+        <input type="checkbox" id="chk-uno-a-uno" checked onchange="renderCargos()"> Un cargo por cita (1:1)
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:var(--muted);cursor:pointer;">
+        <input type="checkbox" id="chk-farmacia" onchange="renderCargos()"> Farmacia cuenta como cargo
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;color:var(--muted);cursor:pointer;">
+        <input type="checkbox" id="chk-solo-ex" onchange="renderCargos()"> Solo médicos externos (EX)
+      </label>
+      <button class="filter-btn" onclick="exportarCargosCSV()" style="margin-left:auto;">⬇ Exportar pendientes (.csv)</button>
     </div>
-    <p style="font-size:12px;color:var(--muted);margin:-8px 0 14px;">Nota: el cruce es por nombre de paciente contra todo el archivo de Cargos del periodo (no cargo por cargo contra cada cita individual), así que si una paciente tiene varias visitas facturadas juntas en un solo cargo, no debería salir aquí. Revisa cada caso antes de asumir que faltó cobrar.</p>
+
+    <div class="kpi-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));">
+      <div class="kpi-card k-neutral"><div class="kpi-label">Citas terminadas auditadas</div><div class="kpi-num" id="g-total">—</div><div class="kpi-sub" id="g-total-sub">Excluye muestra espermática, plática y llamada Px</div></div>
+      <div class="kpi-card k-green"><div class="kpi-label">Con cargo en ventana</div><div class="kpi-num" id="g-con">—</div><div class="kpi-sub" id="g-con-sub">Cargo propio dentro de la ventana</div></div>
+      <div class="kpi-card k-amber"><div class="kpi-label">Revisar</div><div class="kpi-num" id="g-revisar">—</div><div class="kpi-sub">Cargo fuera de ventana o ya asignado a otra cita</div></div>
+      <div class="kpi-card k-red"><div class="kpi-label">Sin ningún cargo</div><div class="kpi-num" id="g-sin">—</div><div class="kpi-sub">La paciente no tiene cargos en el periodo</div></div>
+      <div class="kpi-card k-blue"><div class="kpi-label">% Cumplimiento</div><div class="kpi-num" id="g-pct">—</div><div class="kpi-sub">Citas con cargo propio / citas auditadas</div></div>
+    </div>
+
+    <p style="font-size:12px;color:var(--muted);margin:-8px 0 14px;">
+      El cruce es <strong>cita por cita</strong>: cada cita terminada necesita su propio cargo, del mismo paciente, con fecha dentro de la ventana.
+      Con la regla 1:1 activa un mismo cargo no puede cubrir dos citas — si una paciente tuvo 3 citas, necesita 3 cargos.
+      Se excluyen solo <em>Muestra Espermática para FIV</em>, <em>Muestra Espermática para Inseminación</em>, <em>Plática de resultados</em>, <em>Llamada Px</em> y los bloques internos de Gestión Administrativa.
+      Los conceptos y médicos marcados <strong>(EX)</strong> sí se auditan.
+      <strong>Revisar</strong> no significa que faltó cobrar: normalmente es un paquete cobrado antes o varias visitas facturadas juntas. Es la fila que hay que verificar.
+    </p>
+
     <div class="section">
       <div class="sec-head"><div class="sec-title">Por coordinadora · cumplimiento de cargos</div></div>
       <div class="coord-grid" id="coord-grid-cargos"></div>
     </div>
+
     <div class="section" style="margin-top:20px;">
-      <div class="sec-head"><div class="sec-title">Pacientes con cita terminada sin cargo</div><span class="pill pill-red" id="pill-sincargo"></span></div>
-      <p style="font-size:12px;color:var(--muted);margin:-4px 0 10px;">Si el cargo ya se hizo (ej. en un periodo anterior, o como parte de un paquete), escribe la razón en la columna de Notas — el caso se moverá automáticamente a "Revisadas" y ya no contará como pendiente.</p>
+      <div class="sec-head"><div class="sec-title">Por concepto · dónde se está perdiendo el cargo</div></div>
       <div class="tbl-wrap"><table>
-        <thead><tr><th>Fecha</th><th>Paciente</th><th>Ciudad</th><th>Concepto</th><th>Coordinadora</th><th>Notas</th></tr></thead>
+        <thead><tr><th>Concepto</th><th>Citas</th><th>Con cargo</th><th>Revisar</th><th>Sin ningún cargo</th><th>% Cumplimiento</th></tr></thead>
+        <tbody id="tbody-cargo-concepto"></tbody>
+      </table></div>
+    </div>
+
+    <div class="section" style="margin-top:20px;">
+      <div class="sec-head"><div class="sec-title">Prioridad alta · cita terminada sin ningún cargo del paciente</div><span class="pill pill-red" id="pill-sincargo"></span></div>
+      <p style="font-size:12px;color:var(--muted);margin:-4px 0 10px;">Estas pacientes no tienen <strong>ningún</strong> cargo en el archivo del periodo. Si el cargo ya se hizo (periodo anterior, paquete, cortesía autorizada), escribe la razón en Notas — el caso se mueve a "Revisadas" y deja de contar como pendiente.</p>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Fecha</th><th>Paciente</th><th>Ciudad</th><th>Concepto</th><th>Coordinadora</th><th>Cargo más cercano</th><th>Notas</th></tr></thead>
         <tbody id="tbody-sincargo"></tbody>
       </table></div>
     </div>
+
+    <div class="section" style="margin-top:20px;">
+      <div class="sec-head"><div class="sec-title">Revisar · cargo fuera de ventana o ya asignado a otra cita</div><span class="pill pill-amber" id="pill-cargo-revisar"></span></div>
+      <p style="font-size:12px;color:var(--muted);margin:-4px 0 10px;">La paciente sí tuvo cargos en el periodo, pero ninguno queda libre dentro de la ventana de esta cita. Casi siempre es un paquete o una facturación agrupada: confírmalo y déjalo escrito en Notas.</p>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Fecha</th><th>Paciente</th><th>Ciudad</th><th>Concepto</th><th>Coordinadora</th><th>Cargo más cercano</th><th>Notas</th></tr></thead>
+        <tbody id="tbody-cargo-revisar"></tbody>
+      </table></div>
+    </div>
+
     <div class="section" style="margin-top:20px;">
       <details>
         <summary style="font-size:12.5px;font-weight:600;color:var(--muted);cursor:pointer;padding:4px 0;">
           Revisadas con nota (ya no cuentan como pendientes) <span class="pill pill-grey" id="pill-cargo-revisado"></span>
         </summary>
         <div class="tbl-wrap" style="margin-top:8px;"><table>
-          <thead><tr><th>Fecha</th><th>Paciente</th><th>Ciudad</th><th>Concepto</th><th>Coordinadora</th><th>Notas</th></tr></thead>
+          <thead><tr><th>Fecha</th><th>Paciente</th><th>Ciudad</th><th>Concepto</th><th>Coordinadora</th><th>Cargo más cercano</th><th>Notas</th></tr></thead>
           <tbody id="tbody-cargo-revisado"></tbody>
+        </table></div>
+      </details>
+    </div>
+
+    <div class="section" style="margin-top:20px;">
+      <details>
+        <summary style="font-size:12.5px;font-weight:600;color:var(--muted);cursor:pointer;padding:4px 0;">
+          Citas con cargo emparejado ✔ (para verificar el cruce) <span class="pill pill-green" id="pill-cargo-ok"></span>
+        </summary>
+        <div class="tbl-wrap" style="margin-top:8px;"><table>
+          <thead><tr><th>Fecha</th><th>Paciente</th><th>Ciudad</th><th>Concepto</th><th>Cargo emparejado</th><th>F. Cargo</th><th>Δ días</th><th>Importe</th></tr></thead>
+          <tbody id="tbody-cargo-ok"></tbody>
         </table></div>
       </details>
     </div>
@@ -1828,142 +1891,371 @@ function renderExperiencia() {
   show('content-experiencia', true);
 }
 
-// Conceptos que estructuralmente NUNCA generan un cargo propio (no es que
-// tengan descuento — simplemente no existe un cargo para ellos en Vrepro),
-// así que no deben marcarse como "sin cargo" en la auditoría.
-// "Plática de resultados (15)" (también referida como "Px (15)"/"Llamada
-// Px (15 min)") es una llamada corta de 15 min sin costo.
-// IMPORTANTE: los casos marcados como "incluido/incluida" o "gratis" en el
-// Concepto o en Observaciones SÍ deben tener un cargo — solo que con 100%
-// de descuento. Por eso ya NO se excluyen aquí; si no tienen cargo (aunque
-// sea de $0), deben seguir apareciendo como pendientes.
-const CARGO_GRATIS_KW = [
-  'platica de resultados (15)', 'plática de resultados (15)',
-  'llamada px (15', 'px (15)',
-  // Consultas de seguimiento/control que no generan cargo aparte
-  'subsecuente', 'seguimiento folicular', 'revision post tratamiento',
-  'muestra espermatica para fiv', 'muestra espermatica para inseminacion',
-  // Citas de "inicio de..." — el cargo del tratamiento/paquete ya se hizo
-  // antes, esta cita solo marca el arranque del ciclo
-  'inicio de tratamiento', 'inicio tratamiento',
-  'inicio de preparacion endometrial', 'inicio preparacion endometrial',
-  'inicio de estimulacion ovarica', 'inicio estimulacion ovarica',
+// ─── CARGOS · REGLA DE EXENCIÓN ───────────────────────────────────────────
+// Regla vigente (agosto 2026): TODA cita terminada debe tener un cargo
+// registrado — incluidas las consultas subsecuentes, los seguimientos
+// foliculares, los inicios de tratamiento y las citas de médicos externos
+// marcadas (EX). Un concepto "incluido" o "gratis" también debe tener su
+// cargo, aunque sea con 100% de descuento.
+// Excepciones estructurales (no generan cargo propio en Vrepro):
+//   · Muestra Espermática para FIV / para Inseminación — se cobran dentro
+//     del procedimiento.
+//   · Plática de resultados y Llamada Px — contacto de acompañamiento
+//     incluido en la consulta o el paquete que las originó.
+const CARGO_EXENTO_KW = [
+  'muestra espermatica para fiv',
+  'muestra espermatica para inseminacion',
+  // La plática de resultados y la llamada de seguimiento al paciente son
+  // contactos de acompañamiento, no servicios facturables por separado:
+  // se cobran dentro de la consulta o del paquete que las originó.
+  'platica de resultados',
+  'llamada px',
+  'llamada paciente',
+  'llamada a paciente',
 ];
-function isCargoGratis(concepto) {
+function isCargoExento(concepto) {
   const c = normProf(concepto || '');
-  return CARGO_GRATIS_KW.some(k => c.includes(normProf(k)));
+  return CARGO_EXENTO_KW.some(k => c.includes(normProf(k)));
 }
+// Alias legado — otras partes del tablero pueden seguir llamándolo así.
+function isCargoGratis(concepto) { return isCargoExento(concepto); }
 
 // ─── CARGOS (auditoría de cobros) ──────────────────────────────────────────
-// Verifica que toda cita "Terminada" (que no sea un bloque interno de
-// Gestión Administrativa, que no corresponde a una paciente real, ni un
-// concepto gratuito como la plática de resultados de 15 min) tenga al
-// menos un cargo registrado a su nombre en el archivo de Cargos del mismo
-// periodo. El cruce es por nombre de paciente contra TODO el archivo de
-// Cargos (no cita por cita), porque una paciente puede tener varias visitas
-// facturadas juntas en un solo cargo — así que esto es una señal para
-// revisar, no una regla exacta de "esta cita específica no se cobró".
+// El cruce es CITA POR CITA, no paciente por paciente:
+//   1. Se toman todas las citas "Terminada" (menos Gestión Administrativa y
+//      las dos muestras espermáticas exentas).
+//   2. Para cada cita se busca un cargo del MISMO paciente con "F. Cargo"
+//      dentro de la ventana configurada (por defecto ± 7 días; el 96% de los
+//      cargos del periodo caen ahí, y el 79% el mismo día).
+//   3. Con la regla 1:1 activa, un cargo ya emparejado no puede cubrir otra
+//      cita — así una paciente con 3 visitas necesita 3 cargos.
+// El resultado se clasifica en tres cubetas, en orden de gravedad:
+//   · CON CARGO  — cita emparejada dentro de la ventana.
+//   · REVISAR    — la paciente sí tiene cargos en el periodo, pero ninguno
+//                  libre dentro de la ventana. Típicamente un paquete cobrado
+//                  antes o varias visitas facturadas juntas: hay que
+//                  verificarlo, no asumir que faltó cobrar.
+//   · SIN CARGO  — la paciente no tiene ningún cargo en todo el archivo.
+//                  Es el cobro realmente en riesgo.
+let VENTANA_CARGOS = 7;
+
+function setVentana(dias, btn) {
+  VENTANA_CARGOS = dias;
+  const bar = document.getElementById('cargos-controls');
+  if (bar) bar.querySelectorAll('.filter-btn[data-win]').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderCargos();
+}
+
+function chk(id, def) {
+  const el = document.getElementById(id);
+  return el ? el.checked : def;
+}
+
+// Un cargo de Farmacia es una venta de medicamento, no el cobro del servicio
+// de la cita. Por defecto NO cuenta como cargo válido para cubrir una cita
+// (se puede activar con el checkbox).
+function esCargoFarmacia(c) {
+  return normProf(c['Nombre Prod.'] || c['Concepto'] || '').includes('farmacia');
+}
+
+function fechaMs(raw) {
+  const d = parseDate(raw);
+  if (!d || isNaN(d)) return null;
+  return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+}
+const UN_DIA = 86400000;
+
+// Descripción corta del cargo para mostrar en las tablas.
+function cargoLabel(c) {
+  const prod = c['Nombre Prod.'] || c['Concepto'] || '—';
+  return String(prod).length > 60 ? String(prod).slice(0, 58) + '…' : String(prod);
+}
+
+// Empareja citas y cargos. Devuelve, por cita, el cargo asignado (o null) y
+// el cargo más cercano del paciente aunque haya quedado fuera de la ventana
+// —ese dato es el que le permite a la coordinadora resolver el caso sin
+// abrir Vrepro.
+function emparejarCargos(citasRows) {
+  const unoAUno = chk('chk-uno-a-uno', true);
+  const contarFarmacia = chk('chk-farmacia', false);
+  const ventana = VENTANA_CARGOS;
+
+  // Índice de cargos por paciente
+  const porPaciente = {};
+  (state.cargos || []).forEach((c, idx) => {
+    const key = normName(c['Historia'] || '');
+    if (!key) return;
+    (porPaciente[key] = porPaciente[key] || []).push({
+      idx, row: c, ms: fechaMs(c['F. Cargo']),
+      farmacia: esCargoFarmacia(c), usado: false
+    });
+  });
+
+  // Procesar en orden cronológico: el cargo más antiguo se asigna a la cita
+  // más antigua, que es como se factura en la práctica.
+  const orden = citasRows.slice().sort((a, b) => (fechaMs(a['Fecha']) || 0) - (fechaMs(b['Fecha']) || 0));
+  const resultado = new Map();
+
+  orden.forEach(r => {
+    const key = normName(r['Apellidos, Nombre'] || '');
+    const citaMs = fechaMs(r['Fecha']);
+    const cands = porPaciente[key] || [];
+    let match = null, mejorDelta = null;
+    let cercano = null, cercanoDelta = null;
+
+    cands.forEach(c => {
+      if (c.ms == null || citaMs == null) return;
+      const delta = Math.round((c.ms - citaMs) / UN_DIA);
+      // El "cargo más cercano" se calcula sobre todos los cargos del paciente
+      // (incluida farmacia), solo para informar en la tabla.
+      if (cercanoDelta === null || Math.abs(delta) < Math.abs(cercanoDelta)) {
+        cercano = c; cercanoDelta = delta;
+      }
+      if (!contarFarmacia && c.farmacia) return;
+      if (unoAUno && c.usado) return;
+      if (Math.abs(delta) > ventana) return;
+      if (mejorDelta === null || Math.abs(delta) < Math.abs(mejorDelta)) {
+        match = c; mejorDelta = delta;
+      }
+    });
+
+    if (match) match.usado = true;
+
+    const tieneAlguno = cands.length > 0;
+    const estado = match ? 'con' : (tieneAlguno ? 'revisar' : 'sin');
+    resultado.set(r, {
+      estado,
+      match: match ? match.row : null,
+      delta: match ? mejorDelta : null,
+      cercano: cercano ? cercano.row : null,
+      cercanoDelta: cercanoDelta
+    });
+  });
+
+  return resultado;
+}
+
+// Celda "Cargo más cercano": qué cargo existe del paciente y a cuántos días,
+// para que la coordinadora pueda resolver el caso sin salir del tablero.
+function celdaCercano(info) {
+  if (!info || !info.cercano) {
+    return '<td class="td-muted" style="font-size:11px;">Sin cargos en el periodo</td>';
+  }
+  const d = info.cercanoDelta;
+  const signo = d === 0 ? 'mismo día' : (d > 0 ? `+${d} d` : `${d} d`);
+  const monto = info.cercano['Tt Venta + IVA'] || info.cercano['Total Venta'] || '';
+  return `<td class="td-muted" style="font-size:11px;max-width:260px;white-space:normal;">
+    ${cargoLabel(info.cercano)}<br><span style="opacity:.7">${fmtDate(info.cercano['F. Cargo'])} · ${signo}${monto ? ' · $' + monto : ''}</span>
+  </td>`;
+}
+
+let CARGOS_PENDIENTES_CSV = [];
+
 function renderCargos() {
   if (!state.citas || !state.cargos) return;
 
-  const cargoNames = new Set(
-    state.cargos.map(c => normName(c['Historia'] || ''))
-  );
+  const soloEX = chk('chk-solo-ex', false);
 
   const auditadas = state.citas.filter(r =>
     r['Estado'] === 'Terminada' &&
     r['Grupo de conceptos'] !== 'Gestión Administrativa' &&
-    !isCargoGratis(r['Concepto'])
+    !isCargoExento(r['Concepto'])
   );
 
-  const auditadasF = filterByCoord(auditadas, 'cargos');
+  // El emparejamiento se hace SIEMPRE sobre el universo completo de citas,
+  // antes de aplicar filtros. Si se emparejara solo dentro del filtro, los
+  // cargos que en realidad consumió otra coordinadora quedarían libres y el
+  // cumplimiento subiría de forma artificial al filtrar.
+  const info = emparejarCargos(auditadas);
 
-  const tieneCargo = r => cargoNames.has(normName(r['Apellidos, Nombre']));
-  // Una fila "sin cargo" que ya tiene una nota de la coordinadora (ej. "cargo
-  // hecho el mes anterior, incluye esta cita") se considera revisada y ya
-  // no cuenta como pendiente — pero se sigue mostrando, aparte, para que
-  // quede constancia de por qué no aparece como pendiente.
+  let auditadasF = filterByCoord(auditadas, 'cargos');
+  if (soloEX) auditadasF = auditadasF.filter(r => esExternoTag(r));
+  const infoDe = r => info.get(r) || { estado: 'sin', cercano: null, cercanoDelta: null };
+
   const notaResuelta = r => notaDiceCargoResuelto(r['Apellidos, Nombre'], fmtDate(r['Fecha']), r['Concepto']);
-  const conCargo = auditadasF.filter(tieneCargo);
-  const sinCargoTodas = auditadasF.filter(r => !tieneCargo(r));
-  const sinCargo = sinCargoTodas.filter(r => !notaResuelta(r));
-  const revisadas = sinCargoTodas.filter(r => notaResuelta(r));
-  const pct = auditadasF.length > 0 ? Math.round((conCargo.length + revisadas.length) / auditadasF.length * 100) : 0;
+
+  const conCargo   = auditadasF.filter(r => infoDe(r).estado === 'con');
+  const revisarAll = auditadasF.filter(r => infoDe(r).estado === 'revisar');
+  const sinAll     = auditadasF.filter(r => infoDe(r).estado === 'sin');
+  const revisar    = revisarAll.filter(r => !notaResuelta(r));
+  const sinCargo   = sinAll.filter(r => !notaResuelta(r));
+  const revisadas  = [...revisarAll, ...sinAll].filter(notaResuelta);
+
+  const cubiertas = conCargo.length + revisadas.length;
+  const pct = auditadasF.length > 0 ? Math.round(cubiertas / auditadasF.length * 100) : 0;
 
   set('g-total', auditadasF.length);
-  set('g-con', conCargo.length + revisadas.length);
+  set('g-con', conCargo.length);
+  set('g-revisar', revisar.length);
   set('g-sin', sinCargo.length);
   set('g-pct', auditadasF.length > 0 ? pct + '%' : '—');
+  set('g-con-sub', VENTANA_CARGOS >= 999 ? 'Cargo propio en todo el periodo'
+      : VENTANA_CARGOS === 0 ? 'Cargo propio el mismo día'
+      : `Cargo propio dentro de ± ${VENTANA_CARGOS} días`);
+  const nEX = auditadasF.filter(r => esExternoTag(r)).length;
+  set('g-total-sub', `Incluye ${nEX} citas (EX) · excluye muestra espermática, plática y llamada Px`);
 
-  // By coord
+  // ── Por coordinadora ──
   const byCoord = {};
-  COORD_LIST.forEach(c => byCoord[c] = {total:0, con:0});
+  COORD_LIST.forEach(c => byCoord[c] = { total: 0, con: 0, rev: 0, sin: 0 });
   auditadasF.forEach(r => {
     const coord = getCoordByHistoria(r, getCiudad(r));
     if (!coord || !byCoord[coord]) return;
+    const e = infoDe(r).estado;
     byCoord[coord].total++;
-    if (tieneCargo(r) || notaResuelta(r)) byCoord[coord].con++;
+    if (e === 'con' || notaResuelta(r)) byCoord[coord].con++;
+    else if (e === 'revisar') byCoord[coord].rev++;
+    else byCoord[coord].sin++;
   });
 
   document.getElementById('coord-grid-cargos').innerHTML = COORD_LIST
     .filter(c => byCoord[c].total > 0)
     .map(c => {
-      const {total, con} = byCoord[c];
+      const { total, con, rev, sin } = byCoord[c];
       const p = total > 0 ? Math.round(con / total * 100) : 0;
       const cls = p >= 90 ? 'cc-green' : p >= 70 ? 'cc-amber' : 'cc-red';
       return `<div class="coord-card ${cls}">
         <div class="coord-name">${c}</div>
-        <div class="coord-stat"><span class="cs-lbl">Citas terminadas auditadas</span><span class="cs-val">${total}</span></div>
+        <div class="coord-stat"><span class="cs-lbl">Citas auditadas</span><span class="cs-val">${total}</span></div>
         <div class="coord-stat"><span class="cs-lbl">Con cargo</span><span class="cs-val v-green">${con}</span></div>
-        <div class="coord-stat"><span class="cs-lbl">Sin cargo</span><span class="cs-val ${total-con>0?'v-red':''}">${total-con}</span></div>
-        <div class="coord-stat"><span class="cs-lbl">% Cumplimiento</span><span class="cs-val ${cls==='cc-green'?'v-green':cls==='cc-amber'?'v-amber':'v-red'}">${p}%</span></div>
+        <div class="coord-stat"><span class="cs-lbl">Revisar</span><span class="cs-val ${rev > 0 ? 'v-amber' : ''}">${rev}</span></div>
+        <div class="coord-stat"><span class="cs-lbl">Sin ningún cargo</span><span class="cs-val ${sin > 0 ? 'v-red' : ''}">${sin}</span></div>
+        <div class="coord-stat"><span class="cs-lbl">% Cumplimiento</span><span class="cs-val ${cls === 'cc-green' ? 'v-green' : cls === 'cc-amber' ? 'v-amber' : 'v-red'}">${p}%</span></div>
       </div>`;
     }).join('');
 
-  document.getElementById('pill-sincargo').textContent = sinCargo.length + ' pacientes';
-
-  document.getElementById('tbody-sincargo').innerHTML = sinCargo.length === 0
-    ? '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px;">Todas las citas terminadas tienen cargo registrado ✔</td></tr>'
-    : sinCargo.map(r => {
-        const coord = getCoordByHistoria(r, getCiudad(r));
-        const c = getCiudad(r) || '—';
-        const fechaStr = fmtDate(r['Fecha']);
+  // ── Por concepto: dónde se pierde el cargo ──
+  const porConcepto = {};
+  auditadasF.forEach(r => {
+    const k = r['Concepto'] || '—';
+    const o = porConcepto[k] = porConcepto[k] || { total: 0, con: 0, rev: 0, sin: 0 };
+    const e = infoDe(r).estado;
+    o.total++;
+    if (e === 'con' || notaResuelta(r)) o.con++;
+    else if (e === 'revisar') o.rev++;
+    else o.sin++;
+  });
+  const filasConcepto = Object.entries(porConcepto)
+    .sort((a, b) => (b[1].sin + b[1].rev) - (a[1].sin + a[1].rev) || b[1].total - a[1].total);
+  document.getElementById('tbody-cargo-concepto').innerHTML = filasConcepto.length === 0
+    ? '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px;">Sin datos</td></tr>'
+    : filasConcepto.map(([k, o]) => {
+        const p = o.total > 0 ? Math.round(o.con / o.total * 100) : 0;
+        const cls = p >= 90 ? 'v-green' : p >= 70 ? 'v-amber' : 'v-red';
         return `<tr>
-          <td class="td-muted">${fechaStr}</td>
-          <td class="td-name">${r['Apellidos, Nombre']||'—'}</td>
-          <td><span class="tag tag-${c.toLowerCase()}">${c}</span></td>
-          <td class="td-muted">${r['Concepto']||'—'}</td>
-          <td>${coord ? `<span class="badge b-teal">${coord}</span>` : '—'}</td>
-          ${notaCellHTML('sincargo', r['Apellidos, Nombre'], fechaStr, r['Concepto'])}
+          <td class="td-name">${k}</td>
+          <td>${o.total}</td>
+          <td class="td-green">${o.con}</td>
+          <td class="${o.rev > 0 ? 'td-amber' : 'td-muted'}">${o.rev}</td>
+          <td class="${o.sin > 0 ? 'td-red' : 'td-muted'}">${o.sin}</td>
+          <td class="${cls}" style="font-weight:700;">${p}%</td>
         </tr>`;
       }).join('');
 
-  // Revisadas: salieron de "sin cargo" porque la coordinadora ya explicó en
-  // la nota por qué está cubierta (ej. cargo hecho en otro periodo/paquete).
-  // Se muestran aparte para que quede constancia, con la nota visible.
+  // ── Tablas de pendientes ──
+  const filaHTML = r => {
+    const coord = getCoordByHistoria(r, getCiudad(r));
+    const c = getCiudad(r) || '—';
+    const fechaStr = fmtDate(r['Fecha']);
+    const ex = esExternoTag(r) ? ' <span class="tag tag-mefis">EX</span>' : '';
+    return `<tr>
+      <td class="td-muted">${fechaStr}</td>
+      <td class="td-name">${r['Apellidos, Nombre'] || '—'}</td>
+      <td><span class="tag tag-${c.toLowerCase()}">${c}</span></td>
+      <td class="td-muted">${r['Concepto'] || '—'}${ex}</td>
+      <td>${coord ? `<span class="badge b-teal">${coord}</span>` : '—'}</td>
+      ${celdaCercano(infoDe(r))}
+      ${notaCellHTML('sincargo', r['Apellidos, Nombre'], fechaStr, r['Concepto'])}
+    </tr>`;
+  };
+
+  document.getElementById('pill-sincargo').textContent = sinCargo.length + ' citas';
+  document.getElementById('tbody-sincargo').innerHTML = sinCargo.length === 0
+    ? '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px;">Ninguna cita terminada quedó sin cargo ✔</td></tr>'
+    : sinCargo.map(filaHTML).join('');
+
+  const pillRevisar = document.getElementById('pill-cargo-revisar');
+  if (pillRevisar) pillRevisar.textContent = revisar.length + ' citas';
+  const tbodyRevisar = document.getElementById('tbody-cargo-revisar');
+  if (tbodyRevisar) {
+    tbodyRevisar.innerHTML = revisar.length === 0
+      ? '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px;">Nada por revisar en esta ventana ✔</td></tr>'
+      : revisar.map(filaHTML).join('');
+  }
+
   const pillRevisadas = document.getElementById('pill-cargo-revisado');
-  if (pillRevisadas) pillRevisadas.textContent = revisadas.length + ' pacientes';
+  if (pillRevisadas) pillRevisadas.textContent = revisadas.length + ' citas';
   const tbodyRevisadas = document.getElementById('tbody-cargo-revisado');
   if (tbodyRevisadas) {
     tbodyRevisadas.innerHTML = revisadas.length === 0
-      ? '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px;">Sin casos revisados por nota</td></tr>'
-      : revisadas.map(r => {
-          const coord = getCoordByHistoria(r, getCiudad(r));
+      ? '<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:16px;">Sin casos revisados por nota</td></tr>'
+      : revisadas.map(filaHTML).join('');
+  }
+
+  // ── Emparejadas (verificación del cruce) ──
+  const pillOk = document.getElementById('pill-cargo-ok');
+  if (pillOk) pillOk.textContent = conCargo.length + ' citas';
+  const tbodyOk = document.getElementById('tbody-cargo-ok');
+  if (tbodyOk) {
+    tbodyOk.innerHTML = conCargo.length === 0
+      ? '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:16px;">Sin emparejamientos</td></tr>'
+      : conCargo.slice(0, 400).map(r => {
+          const i = infoDe(r);
           const c = getCiudad(r) || '—';
-          const fechaStr = fmtDate(r['Fecha']);
+          const d = i.delta;
           return `<tr>
-            <td class="td-muted">${fechaStr}</td>
-            <td class="td-name">${r['Apellidos, Nombre']||'—'}</td>
+            <td class="td-muted">${fmtDate(r['Fecha'])}</td>
+            <td class="td-name">${r['Apellidos, Nombre'] || '—'}</td>
             <td><span class="tag tag-${c.toLowerCase()}">${c}</span></td>
-            <td class="td-muted">${r['Concepto']||'—'}</td>
-            <td>${coord ? `<span class="badge b-teal">${coord}</span>` : '—'}</td>
-            ${notaCellHTML('sincargo', r['Apellidos, Nombre'], fechaStr, r['Concepto'])}
+            <td class="td-muted">${r['Concepto'] || '—'}</td>
+            <td class="td-muted" style="max-width:260px;white-space:normal;">${i.match ? cargoLabel(i.match) : '—'}</td>
+            <td class="td-muted">${i.match ? fmtDate(i.match['F. Cargo']) : '—'}</td>
+            <td class="${d === 0 ? 'td-green' : 'td-amber'}">${d === 0 ? 'mismo día' : (d > 0 ? '+' + d : d)}</td>
+            <td class="td-muted">${i.match ? (i.match['Tt Venta + IVA'] || i.match['Total Venta'] || '—') : '—'}</td>
           </tr>`;
         }).join('');
   }
 
+  // ── Datos para exportar ──
+  CARGOS_PENDIENTES_CSV = [
+    ...sinCargo.map(r => ['Sin ningún cargo', r]),
+    ...revisar.map(r => ['Revisar', r])
+  ].map(([tipo, r]) => {
+    const i = infoDe(r);
+    return {
+      Prioridad: tipo,
+      Fecha: fmtDate(r['Fecha']),
+      Paciente: r['Apellidos, Nombre'] || '',
+      Ciudad: getCiudad(r) || '',
+      Concepto: r['Concepto'] || '',
+      Externo: esExternoTag(r) ? 'EX' : '',
+      Coordinadora: getCoordByHistoria(r, getCiudad(r)) || '',
+      Profesional: r['Profesional Historia'] || r['Profesional'] || '',
+      Observaciones: r['Obs.'] || '',
+      CargoMasCercano: i.cercano ? cargoLabel(i.cercano) : 'Sin cargos en el periodo',
+      FechaCargoCercano: i.cercano ? fmtDate(i.cercano['F. Cargo']) : '',
+      DiasDeDiferencia: i.cercanoDelta === null ? '' : i.cercanoDelta
+    };
+  });
+
   show('loading-cargos', false);
   show('content-cargos', true);
+}
+
+function exportarCargosCSV() {
+  if (!CARGOS_PENDIENTES_CSV.length) { alert('No hay pendientes que exportar.'); return; }
+  const cols = Object.keys(CARGOS_PENDIENTES_CSV[0]);
+  const esc = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  const csv = [cols.join(',')]
+    .concat(CARGOS_PENDIENTES_CSV.map(o => cols.map(c => esc(o[c])).join(',')))
+    .join('\n');
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `cargos_pendientes_ventana_${VENTANA_CARGOS >= 999 ? 'periodo' : VENTANA_CARGOS + 'd'}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 // ─── PLÁTICA DE RESULTADOS ────────────────────────────────────────────────────
