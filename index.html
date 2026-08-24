@@ -126,6 +126,7 @@
   .tag-cdmx { background: var(--blue-light); color: #1d4ed8; }
   .tag-met  { background: #fdf4ff; color: #7e22ce; }
   .tag-sub  { background: #fff7ed; color: #c2410c; }
+  .tag-ext  { background: #f1f5f9; color: #475569; }
 
   /* ALERT */
   .alert { border-radius: var(--radius); padding: 12px 16px; margin-bottom: 14px; font-size: 12px; line-height: 1.6; }
@@ -539,7 +540,7 @@ const DOCTOR_COORD_MET = {
   'guadalupe nolazco': 'Alondra',
 };
 
-const COORD_LIST = ['Viviana','Mariana','Reyna','Jimena','Lucy','Sharon','Jacqueline','Alondra','Yanelli','Subrogación'];
+const COORD_LIST = ['Viviana','Mariana','Reyna','Jimena','Lucy','Sharon','Jacqueline','Alondra','Yanelli','Subrogación','Wendy'];
 
 // Agrupación de coordinadoras por clínica (para filtros y vista de Conversión)
 const CLINIC_GROUPS = [
@@ -550,6 +551,10 @@ const CLINIC_GROUPS = [
   // que llegan por una agencia de subrogación gestacional. Se agrupan
   // aparte para no mezclarlos con las estadísticas de GDL/CDMX/MTP.
   { label: 'SUB',  coords: ['Subrogación'] },
+  // Wendy audita los cargos de citas con médicos externos (no forman parte
+  // del roster interno de ninguna sede) — se agrupan aparte, igual que
+  // Subrogación.
+  { label: 'EXT',  coords: ['Wendy'] },
 ];
 
 // Alias de nombre propio de cada coordinadora, para identificarla cuando
@@ -817,9 +822,14 @@ function getCoordByHistoria(row, cityOverride) {
   // ciudad detectada no coincide con la sede real de la doctora.
   const fromAnyCity = coordFromProfAnyCity(raw, fecha);
   if (fromAnyCity) return fromAnyCity;
-  // Último recurso: alias corto de la propia coordinadora en el campo
-  // (ej. ella misma aparece como Profesional Historia).
-  return matchCoordAlias(prof);
+  // Alias corto de la propia coordinadora en el campo (ej. ella misma
+  // aparece como Profesional Historia).
+  const alias = matchCoordAlias(prof);
+  if (alias) return alias;
+  // El doctor no está en ningún roster interno -> médico externo. Estas
+  // citas también deben auditarse en Cargos, y se le asignan a Wendy.
+  if (isExternal(row)) return 'Wendy';
+  return null;
 }
 
 // Legacy - kept for sheet IT compatibility
