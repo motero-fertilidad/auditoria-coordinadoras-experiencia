@@ -125,6 +125,7 @@
   .tag-gdl  { background: #ecfdf5; color: #065f46; }
   .tag-cdmx { background: var(--blue-light); color: #1d4ed8; }
   .tag-met  { background: #fdf4ff; color: #7e22ce; }
+  .tag-sub  { background: #fff7ed; color: #c2410c; }
 
   /* ALERT */
   .alert { border-radius: var(--radius); padding: 12px 16px; margin-bottom: 14px; font-size: 12px; line-height: 1.6; }
@@ -538,13 +539,17 @@ const DOCTOR_COORD_MET = {
   'guadalupe nolazco': 'Alondra',
 };
 
-const COORD_LIST = ['Viviana','Mariana','Reyna','Jimena','Lucy','Sharon','Jacqueline','Alondra','Yanelli'];
+const COORD_LIST = ['Viviana','Mariana','Reyna','Jimena','Lucy','Sharon','Jacqueline','Alondra','Yanelli','Subrogación'];
 
 // Agrupación de coordinadoras por clínica (para filtros y vista de Conversión)
 const CLINIC_GROUPS = [
   { label: 'GDL',  coords: ['Viviana', 'Mariana'] },
   { label: 'CDMX', coords: ['Sharon', 'Reyna', 'Lucy', 'Jimena', 'Jacqueline'] },
   { label: 'MTP',  coords: ['Yanelli', 'Alondra'] },
+  // Subrogación no es una sede física — son pacientes de cualquier ciudad
+  // que llegan por una agencia de subrogación gestacional. Se agrupan
+  // aparte para no mezclarlos con las estadísticas de GDL/CDMX/MTP.
+  { label: 'SUB',  coords: ['Subrogación'] },
 ];
 
 // Alias de nombre propio de cada coordinadora, para identificarla cuando
@@ -705,8 +710,29 @@ function coordFromProfAnyCity(profRaw, fecha) {
   return null;
 }
 
+// Pacientes de subrogación gestacional: sin importar qué doctor las atienda
+// o en qué ciudad, se le asignan siempre a la coordinadora "Subrogación".
+// Se detecta por:
+//  1) El tipo de consulta (Concepto) — "Consulta de Primera Vez IP's" (IP =
+//     "intended parents", los padres de intención) o "Valoración subrogada".
+//  2) La agencia de origen (Procedencia) — Gestacy, My Surrogacy Journey,
+//     VIP subrogacy, o cualquier procedencia con "surrogac"/"subrogac" en
+//     el nombre.
+const SUBROGACION_CONCEPTO_KW = [
+  "consulta de primera vez ip", 'valoracion subrogada', 'valoración subrogada',
+];
+const SUBROGACION_AGENCIAS = ['gestacy', 'surrogac', 'subrogac'];
+function esSubrogacion(row) {
+  const concepto = normProf(row['Concepto'] || '');
+  if (concepto && SUBROGACION_CONCEPTO_KW.some(k => concepto.includes(normProf(k)))) return true;
+  const procedencia = normProf(row['Procedencia'] || '');
+  if (procedencia && SUBROGACION_AGENCIAS.some(k => procedencia.includes(k))) return true;
+  return false;
+}
+
 // Get coordinator from doctor name + city
 function getCoord(row, cityOverride) {
+  if (esSubrogacion(row)) return 'Subrogación';
   // Para "Captura ovular", el campo "Profesional" suele ser quien realizó el
   // procedimiento ese día (ej. Giovanni), no la doctora tratante de la
   // paciente. La doctora tratante real está en "Profesional Historia".
@@ -774,6 +800,7 @@ function getCoord(row, cityOverride) {
 // generó esta cita en particular (ej. Graves, Forrest Michael es paciente
 // del Dr. Armando Roque → Jimena, aunque Reyna haya agendado su ED).
 function getCoordByHistoria(row, cityOverride) {
+  if (esSubrogacion(row)) return 'Subrogación';
   const raw = row['Profesional Historia'] || row['Profesional'] || '';
   const prof = normProf(raw);
   if (!prof) return null;
@@ -1576,6 +1603,8 @@ function renderExperiencia() {
     'alondra':         'Alondra',
     'yanelli garcia':  'Yanelli',
     'yanelli':         'Yanelli',
+    'subrogacion':     'Subrogación',
+    'subrogación':     'Subrogación',
   };
   // Excluded: Externo, Híbrido, Valeria
 
