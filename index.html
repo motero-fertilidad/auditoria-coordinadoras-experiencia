@@ -126,7 +126,7 @@
   .tag-cdmx { background: var(--blue-light); color: #1d4ed8; }
   .tag-met  { background: #fdf4ff; color: #7e22ce; }
   .tag-sub  { background: #fff7ed; color: #c2410c; }
-  .tag-ext  { background: #f1f5f9; color: #475569; }
+  .tag-mefis { background: #f1f5f9; color: #475569; }
 
   /* ALERT */
   .alert { border-radius: var(--radius); padding: 12px 16px; margin-bottom: 14px; font-size: 12px; line-height: 1.6; }
@@ -266,6 +266,7 @@
       <div class="kpi-card k-blue"><div class="kpi-label">Capturas ovulares</div><div class="kpi-num" id="r-cap">—</div><div class="kpi-sub">Terminadas</div></div>
       <div class="kpi-card k-green"><div class="kpi-label">Pláticas cumplidas</div><div class="kpi-num" id="r-plat">—</div><div class="kpi-sub" id="r-plat-pct">% de primeras veces con estudio</div></div>
       <div class="kpi-card k-red"><div class="kpi-label">Sin plática registrada</div><div class="kpi-num" id="r-sinplat">—</div><div class="kpi-sub">Requieren seguimiento</div></div>
+      <div class="kpi-card k-neutral"><div class="kpi-label">Laboratorio sin doctor asignado</div><div class="kpi-num" id="r-labsd">—</div><div class="kpi-sub" id="r-labsd-split">Estudios sin médico tratante (no son (EX))</div></div>
     </div>
     <div class="city-split" id="city-split-resumen"></div>
     <div class="section">
@@ -540,7 +541,7 @@ const DOCTOR_COORD_MET = {
   'guadalupe nolazco': 'Alondra',
 };
 
-const COORD_LIST = ['Viviana','Mariana','Reyna','Jimena','Lucy','Sharon','Jacqueline','Alondra','Yanelli','Subrogación','Wendy'];
+const COORD_LIST = ['Viviana','Mariana','Reyna','Jimena','Lucy','Sharon','Jacqueline','Alondra','Yanelli','Subrogación','Margarita','Wendy'];
 
 // Agrupación de coordinadoras por clínica (para filtros y vista de Conversión)
 const CLINIC_GROUPS = [
@@ -551,10 +552,11 @@ const CLINIC_GROUPS = [
   // que llegan por una agencia de subrogación gestacional. Se agrupan
   // aparte para no mezclarlos con las estadísticas de GDL/CDMX/MTP.
   { label: 'SUB',  coords: ['Subrogación'] },
-  // Wendy audita los cargos de citas con médicos externos (no forman parte
-  // del roster interno de ninguna sede) — se agrupan aparte, igual que
-  // Subrogación.
-  { label: 'EXT',  coords: ['Wendy'] },
+  // MEFIS = Médicos Externos FI. Auditan los cargos de citas con médicos
+  // externos (que no forman parte del roster interno de ninguna sede),
+  // divididos por sede: Margarita para GDL, Wendy para CDMX (y MTP, donde
+  // por ahora no hay casos de médicos externos).
+  { label: 'MEFIS', coords: ['Margarita', 'Wendy'] },
 ];
 
 // Alias de nombre propio de cada coordinadora, para identificarla cuando
@@ -826,10 +828,45 @@ function getCoordByHistoria(row, cityOverride) {
   // aparece como Profesional Historia).
   const alias = matchCoordAlias(prof);
   if (alias) return alias;
-  // El doctor no está en ningún roster interno -> médico externo. Estas
-  // citas también deben auditarse en Cargos, y se le asignan a Wendy.
-  if (isExternal(row)) return 'Wendy';
+  // El doctor no está en ningún roster interno. Solo se manda a MEFIS
+  // (Margarita/Wendy) si la cita/concepto está marcada explícitamente como
+  // "(EX)" -- igual que isCapturaExcepcion()/isAddonExcepcion(). Si no trae
+  // esa marca, es probable que sea un estudio de laboratorio sin doctor
+  // asignado (ej. Espermatobioscopía, Fragmentación de ADN espermático) y NO
+  // debe contarse como médico externo -- se reporta aparte en Resumen
+  // General (ver esSinDoctorAsignado()).
+  if (esExternoTag(row)) return city === 'GDL' ? 'Margarita' : 'Wendy';
   return null;
+}
+
+// Marca explícita "(EX)" en Concepto u Obs. -> médico externo genuino que sí
+// se debe auditar en Cargos bajo MEFIS (Wendy/Margarita). A diferencia de
+// isExternal(), esto NO incluye citas de laboratorio sin ningún doctor
+// asignado (esas se cuentan en Resumen General, no en Cargos/MEFIS).
+function esExternoTag(row) {
+  const concepto = String(row['Concepto']==null?'':row['Concepto']);
+  const obs = String(row['Obs.']==null?'':row['Obs.']);
+  return /\(ex\)/i.test(concepto) || /\(ex\)/i.test(obs);
+}
+
+// Cita Terminada donde ni "Profesional" ni "Profesional Historia" apuntan a
+// un doctor real (típicamente "Laboratorio FIV/Andrología" en estudios como
+// Espermatobioscopía, Fragmentación de ADN espermático, Muestra Espermática)
+// y que tampoco está marcada "(EX)". No se le asigna coordinadora ni MEFIS;
+// se reporta como métrica aparte en Resumen General.
+const SIN_DOCTOR_PLACEHOLDERS = ['laboratorio', 'enfermeria', 'enfermería'];
+function esSinDoctorAsignado(row) {
+  if (esExternoTag(row)) return false;
+  if (esSubrogacion(row)) return false;
+  // "Profesional Historia" manda (si trae un nombre real de doctor -aunque
+  // sea externo/no roster-, sí hay doctor asignado). Solo cuenta como "sin
+  // doctor" cuando el valor está vacío o es un genérico de laboratorio /
+  // enfermería (sin nombre de persona).
+  const ph = normProf(row['Profesional Historia'] || '');
+  const p = normProf(row['Profesional'] || '');
+  const val = ph || p;
+  if (!val) return true;
+  return SIN_DOCTOR_PLACEHOLDERS.some(k => val.includes(k));
 }
 
 // Legacy - kept for sheet IT compatibility
@@ -2142,6 +2179,10 @@ function renderResumen() {
   set('r-plat', cumplidasResumen);
   set('r-plat-pct', denomResumen>0 ? Math.round(cumplidasResumen/denomResumen*100)+'% de primeras veces con estudio' : '—');
   set('r-sinplat', sinPlatica.length);
+
+  const labSinDoctorRows = citas.filter(r => r['Estado'] === 'Terminada' && esSinDoctorAsignado(r));
+  set('r-labsd', labSinDoctorRows.length);
+  set('r-labsd-split', `GDL: ${labSinDoctorRows.filter(r=>getCiudad(r)==='GDL').length} · CDMX: ${labSinDoctorRows.filter(r=>getCiudad(r)==='CDMX').length} · MET: ${labSinDoctorRows.filter(r=>getCiudad(r)==='MET').length}`);
 
   // City split resumen
   const gdlPV = pvRows.filter(r=>getCiudad(r)==='GDL').length;
