@@ -439,8 +439,7 @@
       <div class="kpi-card k-red"><div class="kpi-label">Sin cargo registrado</div><div class="kpi-num" id="g-sin">—</div><div class="kpi-sub">Posible cobro olvidado</div></div>
       <div class="kpi-card k-amber"><div class="kpi-label">% Cumplimiento</div><div class="kpi-num" id="g-pct">—</div><div class="kpi-sub">Cargos vs. citas terminadas</div></div>
     </div>
-    <p style="font-size:12px;color:var(--muted);margin:-8px 0 14px;">Nota: el cruce es por nombre de paciente contra todo el archivo de Cargos del periodo (no cargo por cargo contra cada cita individual), así que si una paciente tiene varias visitas facturadas juntas en un solo cargo, no debería salir aquí. Revisa cada caso antes de asumir que faltó cobrar.</p>
-    <p style="font-size:12px;margin:-6px 0 16px;">Para la auditoría detallada de cobros —cita por cita, contra el servicio que se prestó— usa el tablero dedicado: <a href="https://motero-fertilidad.github.io/auditoria-cargos/" target="_blank" style="color:var(--green-mid);font-weight:600;">Auditoría de Cargos ↗</a></p>
+    <p style="font-size:12px;color:var(--muted);margin:-8px 0 16px;">El cruce es por paciente + <strong>mes calendario</strong> de la cita, contra el <strong>servicio esperado</strong> (o uno afín del mismo paquete) — no basta con que la paciente tenga cualquier cargo en el periodo. "Inicio de tratamiento" es más estricto: exige el cargo del tratamiento que arranca (FIV, congelamiento o inseminación), sin aceptar servicios afines. Mismo motor que <a href="https://motero-fertilidad.github.io/auditoria-cargos/" target="_blank" style="color:var(--green-mid);font-weight:600;">Auditoría de Cargos ↗</a>.</p>
     <div class="section">
       <div class="sec-head"><div class="sec-title">Por coordinadora · cumplimiento de cargos</div></div>
       <div class="coord-grid" id="coord-grid-cargos"></div>
@@ -449,7 +448,7 @@
       <div class="sec-head"><div class="sec-title">Pacientes con cita terminada sin cargo</div><span class="pill pill-red" id="pill-sincargo"></span></div>
       <p style="font-size:12px;color:var(--muted);margin:-4px 0 10px;">Si el cargo ya se hizo (ej. en un periodo anterior, o como parte de un paquete), escribe la razón en la columna de Notas — el caso se moverá automáticamente a "Revisadas" y ya no contará como pendiente.</p>
       <div class="tbl-wrap"><table>
-        <thead><tr><th>Fecha</th><th>Paciente</th><th>Ciudad</th><th>Concepto</th><th>Coordinadora</th><th>Notas</th></tr></thead>
+        <thead><tr><th>Fecha</th><th>Paciente</th><th>Ciudad</th><th>Concepto</th><th>Servicio esperado</th><th>Lo que sí se le cobró</th><th>Coordinadora</th><th>Notas</th></tr></thead>
         <tbody id="tbody-sincargo"></tbody>
       </table></div>
     </div>
@@ -459,7 +458,7 @@
           Revisadas con nota (ya no cuentan como pendientes) <span class="pill pill-grey" id="pill-cargo-revisado"></span>
         </summary>
         <div class="tbl-wrap" style="margin-top:8px;"><table>
-          <thead><tr><th>Fecha</th><th>Paciente</th><th>Ciudad</th><th>Concepto</th><th>Coordinadora</th><th>Notas</th></tr></thead>
+          <thead><tr><th>Fecha</th><th>Paciente</th><th>Ciudad</th><th>Concepto</th><th>Servicio esperado</th><th>Lo que sí se le cobró</th><th>Coordinadora</th><th>Notas</th></tr></thead>
           <tbody id="tbody-cargo-revisado"></tbody>
         </table></div>
       </details>
@@ -1829,57 +1828,179 @@ function renderExperiencia() {
   show('content-experiencia', true);
 }
 
-// Conceptos que estructuralmente NUNCA generan un cargo propio (no es que
-// tengan descuento — simplemente no existe un cargo para ellos en Vrepro),
-// así que no deben marcarse como "sin cargo" en la auditoría.
-// "Plática de resultados (15)" (también referida como "Px (15)"/"Llamada
-// Px (15 min)") es una llamada corta de 15 min sin costo.
-// IMPORTANTE: los casos marcados como "incluido/incluida" o "gratis" en el
-// Concepto o en Observaciones SÍ deben tener un cargo — solo que con 100%
-// de descuento. Por eso ya NO se excluyen aquí; si no tienen cargo (aunque
-// sea de $0), deben seguir apareciendo como pendientes.
-const CARGO_GRATIS_KW = [
-  'platica de resultados (15)', 'plática de resultados (15)',
-  'llamada px (15', 'px (15)',
-  // Consultas de seguimiento/control que no generan cargo aparte
-  'subsecuente', 'seguimiento folicular', 'revision post tratamiento',
-  'muestra espermatica para fiv', 'muestra espermatica para inseminacion',
-  // Citas de "inicio de..." — el cargo del tratamiento/paquete ya se hizo
-  // antes, esta cita solo marca el arranque del ciclo
-  'inicio de tratamiento', 'inicio tratamiento',
-  'inicio de preparacion endometrial', 'inicio preparacion endometrial',
-  'inicio de estimulacion ovarica', 'inicio estimulacion ovarica',
+// ─── CLASIFICACIÓN DE SERVICIOS (Cargos) ───────────────────────────────────
+// Mismo motor que el tablero dedicado (auditoria-cargos): un cargo y una
+// cita se comparan por SERVICIO esperado/facturado, no por nombre exacto de
+// producto (el catálogo de Vrepro tiene ~150 productos que casi nunca
+// coinciden literalmente con el concepto de la cita). El cruce es por
+// paciente + MES CALENDARIO de la cita (no "en algún momento del archivo"),
+// para no dar por buena, por ejemplo, una cita de julio con un cargo de mayo.
+const REGLAS_CARGO = [
+  ['Farmacia',    ['farmacia']],
+  // Los perfiles son laboratorio aunque el nombre mencione captura o
+  // transferencia ("Perfil pre captura", "Perfil pre transferencia").
+  ['Laboratorio', ['perfil ']],
+  ['Subrogación', ['surrogacy','subrogad','subrogacion']],
+  ['Wellness',    ['acupuntura','masaje','nutricion','terapia individual','psicolog']],
+  ['Tratamiento', ['captura','fertilizacion','transferencia','inseminacion','coitos programados',
+                   'fiv con','ivf with','ovulos garantizados','eggs guaranteed','pgt-a','pgt a',
+                   'embryoscope','vitrificacion','desvitrificacion','congelamiento','criopreservacion',
+                   'almacenamiento de gametos','traslado de gametos','donacion esperma','donadora',
+                   'ovulos fi','desarrollo embrionario','biopsia testicular para fiv']],
+  ['Quirófano',   ['histeroscopia','biopsia','sedacion','anestesia','colocacion diu','diu mirena']],
+  ['Imagen',      ['ultrasonido','histerosonografia','consultorio1hr con us']],
+  ['Consulta',    ['consulta','cita primera vez','check up','check-up','platica de resultados',
+                   'valoracion','servicios administrativos']],
 ];
-function isCargoGratis(concepto) {
-  const c = normProf(concepto || '');
-  return CARGO_GRATIS_KW.some(k => c.includes(normProf(k)));
+function servicioDeCargo(nombreProd) {
+  const p = normProf(nombreProd || '');
+  if (!p) return 'Otro';
+  for (const [srv, kws] of REGLAS_CARGO) if (kws.some(k => p.includes(k))) return srv;
+  return 'Laboratorio'; // el resto del catálogo son estudios sueltos
 }
+
+const REGLAS_CITA = [
+  ['Subrogación', ['valoracion subrogada']],
+  ['Wellness',    ['acupuntura','masaje','nutricion','terapia']],
+  ['Quirófano',   ['histeroscopia','biopsia','histerosonografia']],
+  ['Tratamiento', ['captura ovular','transferencia','inseminacion','inicio de tratamiento',
+                   'congelamiento de muestra','en procedimiento']],
+  ['Imagen',      ['ultrasonido']],
+  ['Laboratorio', ['toma de sangre','toma de cultivos','toma de muestra','espermatobioscopia',
+                   'espermocultivo','fragmentacion','pap','aplicacion de medicamento',
+                   'seguimiento folicular','inicio preparacion endometrial',
+                   'seguimiento preparacion endometrial','seguimiento pe']],
+  ['Consulta',    ['consulta','check up','check-up','subsecuente','revision post tratamiento',
+                   'valoracion','procedimiento en consultorio','seguimiento consulta',
+                   'cita individual de seguimiento']],
+];
+function servicioEsperado(concepto) {
+  const c = normProf(concepto || '');
+  if (!c) return null;
+  for (const [srv, kws] of REGLAS_CITA) if (kws.some(k => c.includes(k))) return srv;
+  return 'Consulta'; // por defecto, cualquier concepto nuevo se audita como consulta
+}
+
+// Servicios que también cubren la cita porque van en el mismo paquete o se
+// facturaron juntos. Farmacia nunca cubre una cita: es venta de medicamento.
+const AFINES_CARGO = {
+  'Consulta':    ['Imagen'],
+  'Laboratorio': ['Imagen','Tratamiento'],
+  'Imagen':      ['Consulta','Laboratorio'],
+  'Tratamiento': ['Laboratorio','Quirófano'],
+  'Quirófano':   ['Tratamiento'],
+  'Subrogación': ['Consulta','Laboratorio','Tratamiento'],
+  'Wellness':    [],
+};
+
+// "Inicio de tratamiento" no genera cargo con ese nombre, pero la paciente
+// tiene que traer forzosamente el cargo del tratamiento que está
+// arrancando: FIV, congelamiento/vitrificación o inseminación. Que tenga
+// estudios de laboratorio ese mes no lo respalda -- por eso NO acepta
+// servicios afines, solo el cargo de Tratamiento exacto.
+const SIN_AFINES_CARGO = ['inicio de tratamiento'];
+function aceptaAfinesCargo(concepto) {
+  const c = normProf(concepto || '');
+  return !SIN_AFINES_CARGO.some(k => c.includes(k));
+}
+
+// Conceptos que estructuralmente NUNCA generan un cargo propio en Vrepro
+// (se cobran dentro de otro procedimiento o paquete), así que no deben
+// marcarse como "sin cargo" en la auditoría.
+// IMPORTANTE: los casos marcados como "incluido/incluida" o "gratis" en el
+// Concepto o en Observaciones SÍ deben tener un cargo -- solo que con 100%
+// de descuento -- así que NO se excluyen aquí.
+const CARGO_EXCLUIDOS = [
+  ['muestra espermatica para fiv',          'Se cobra dentro del tratamiento de FIV'],
+  ['muestra espermatica para inseminacion', 'Se cobra dentro de la inseminación'],
+  ['platica de resultados',                 'Contacto de acompañamiento, sin cargo propio'],
+  ['llamada px',                             'Contacto de acompañamiento, sin cargo propio'],
+  ['subsecuente',                           'Va incluida en la consulta o el paquete, sin cargo propio'],
+  ['revision post tratamiento',             'Va incluida al cargar el FIV, la inseminación o la vitrificación'],
+  ['aplicacion de medicamento',             'Va incluida en el tratamiento, sin cargo propio'],
+  ['seguimiento folicular',                 'Va incluido en el seguimiento del ciclo, sin cargo propio'],
+];
+function motivoExclusionCargo(concepto) {
+  const c = normProf(concepto || '');
+  const hit = CARGO_EXCLUIDOS.find(([k]) => c.includes(k));
+  return hit ? hit[1] : null;
+}
+
+function fechaYMD(d) {
+  const f = fmtDate(d);
+  return (f && f !== '—') ? f : null;
+}
+const mesDeCargo = f => f ? f.slice(0,7) : null;
+const difDiasCargo = (a,b) => Math.round((new Date(a) - new Date(b)) / 86400000);
 
 // ─── CARGOS (auditoría de cobros) ──────────────────────────────────────────
 // Verifica que toda cita "Terminada" (que no sea un bloque interno de
-// Gestión Administrativa, que no corresponde a una paciente real, ni un
-// concepto gratuito como la plática de resultados de 15 min) tenga al
-// menos un cargo registrado a su nombre en el archivo de Cargos del mismo
-// periodo. El cruce es por nombre de paciente contra TODO el archivo de
-// Cargos (no cita por cita), porque una paciente puede tener varias visitas
-// facturadas juntas en un solo cargo — así que esto es una señal para
-// revisar, no una regla exacta de "esta cita específica no se cobró".
+// Gestión Administrativa ni un concepto que estructuralmente no genera
+// cargo propio) tenga, a nombre de la paciente y en el MISMO MES calendario,
+// un cargo del servicio esperado (o de un servicio afín/del mismo paquete).
+// Mismo motor de cruce que el tablero dedicado
+// https://motero-fertilidad.github.io/auditoria-cargos/ — antes este panel
+// solo revisaba si la paciente tenía CUALQUIER cargo en todo el periodo, sin
+// importar el servicio ni el mes, lo que subestimaba los cargos pendientes.
 function renderCargos() {
   if (!state.citas || !state.cargos) return;
 
-  const cargoNames = new Set(
-    state.cargos.map(c => normName(c['Historia'] || ''))
-  );
+  // Índice de cargos por paciente + mes calendario.
+  const idxCargos = {};
+  state.cargos.forEach(c => {
+    const f = fechaYMD(c['F. Cargo']);
+    const k = normName(c['Historia'] || '') + '|' + mesDeCargo(f);
+    (idxCargos[k] = idxCargos[k] || []).push({ row: c, srv: servicioDeCargo(c['Nombre Prod.']), f });
+  });
 
   const auditadas = state.citas.filter(r =>
     r['Estado'] === 'Terminada' &&
     r['Grupo de conceptos'] !== 'Gestión Administrativa' &&
-    !isCargoGratis(r['Concepto'])
+    !motivoExclusionCargo(r['Concepto'])
   );
 
   const auditadasF = filterByCoord(auditadas, 'cargos');
 
-  const tieneCargo = r => cargoNames.has(normName(r['Apellidos, Nombre']));
+  // Para cada cita: busca el cargo del servicio esperado (o afín) a nombre
+  // de la paciente, en el mismo mes calendario que la cita. Un mismo cargo
+  // puede cubrir varias citas (ej. el cargo de un paquete de FIV respalda
+  // todas las visitas del tratamiento ese mes).
+  const _matchCache = new Map();
+  function matchDe(r) {
+    if (_matchCache.has(r)) return _matchCache.get(r);
+    const esp = servicioEsperado(r['Concepto']);
+    const fc = fechaYMD(r['Fecha']);
+    const pool = idxCargos[normName(r['Apellidos, Nombre'] || '') + '|' + mesDeCargo(fc)] || [];
+    const afines = aceptaAfinesCargo(r['Concepto']) ? (AFINES_CARGO[esp] || []) : [];
+
+    const elegir = filtro => {
+      let best = null, bd = null;
+      pool.forEach(c => {
+        if (!filtro(c)) return;
+        const dd = (fc && c.f) ? Math.abs(difDiasCargo(c.f, fc)) : 0;
+        if (bd === null || dd < bd) { best = c; bd = dd; }
+      });
+      return best;
+    };
+
+    let match = elegir(c => c.srv === esp);
+    if (!match) match = elegir(c => afines.includes(c.srv));
+
+    // Cargo de referencia: qué sí se le cobró ese mes, aunque no sea del
+    // servicio esperado -- para mostrar en la tabla y ayudar a resolver el
+    // caso sin tener que abrir Vrepro.
+    let ref = null, refd = null;
+    pool.forEach(c => {
+      const dd = (fc && c.f) ? Math.abs(difDiasCargo(c.f, fc)) : 0;
+      if (refd === null || dd < refd) { ref = c; refd = dd; }
+    });
+
+    const result = { esp, match, ref };
+    _matchCache.set(r, result);
+    return result;
+  }
+
+  const tieneCargo = r => !!matchDe(r).match;
   // Una fila "sin cargo" que ya tiene una nota de la coordinadora (ej. "cargo
   // hecho el mes anterior, incluye esta cita") se considera revisada y ya
   // no cuenta como pendiente — pero se sigue mostrando, aparte, para que
@@ -1923,21 +2044,33 @@ function renderCargos() {
 
   document.getElementById('pill-sincargo').textContent = sinCargo.length + ' pacientes';
 
+  function cargoRefHTML(r) {
+    const ref = matchDe(r).ref;
+    if (!ref) return '<span style="color:var(--muted)">Sin ningún cargo ese mes</span>';
+    const monto = ref.row['Tt Venta + IVA'] || ref.row['Total Venta'] || '';
+    return `${ref.row['Nombre Prod.']||'—'}<br><span style="opacity:.7">${ref.srv} · ${ref.f||''}${monto?' · $'+monto:''}</span>`;
+  }
+
+  function rowHTML(r) {
+    const coord = getCoordByHistoria(r, getCiudad(r));
+    const c = getCiudad(r) || '—';
+    const fechaStr = fmtDate(r['Fecha']);
+    const esp = matchDe(r).esp;
+    return `<tr>
+      <td class="td-muted">${fechaStr}</td>
+      <td class="td-name">${r['Apellidos, Nombre']||'—'}</td>
+      <td><span class="tag tag-${c.toLowerCase()}">${c}</span></td>
+      <td class="td-muted">${r['Concepto']||'—'}</td>
+      <td class="td-muted">${esp||'—'}</td>
+      <td class="td-muted" style="max-width:240px;white-space:normal;font-size:11px;">${cargoRefHTML(r)}</td>
+      <td>${coord ? `<span class="badge b-teal">${coord}</span>` : '—'}</td>
+      ${notaCellHTML('sincargo', r['Apellidos, Nombre'], fechaStr, r['Concepto'])}
+    </tr>`;
+  }
+
   document.getElementById('tbody-sincargo').innerHTML = sinCargo.length === 0
-    ? '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:24px;">Todas las citas terminadas tienen cargo registrado ✔</td></tr>'
-    : sinCargo.map(r => {
-        const coord = getCoordByHistoria(r, getCiudad(r));
-        const c = getCiudad(r) || '—';
-        const fechaStr = fmtDate(r['Fecha']);
-        return `<tr>
-          <td class="td-muted">${fechaStr}</td>
-          <td class="td-name">${r['Apellidos, Nombre']||'—'}</td>
-          <td><span class="tag tag-${c.toLowerCase()}">${c}</span></td>
-          <td class="td-muted">${r['Concepto']||'—'}</td>
-          <td>${coord ? `<span class="badge b-teal">${coord}</span>` : '—'}</td>
-          ${notaCellHTML('sincargo', r['Apellidos, Nombre'], fechaStr, r['Concepto'])}
-        </tr>`;
-      }).join('');
+    ? '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px;">Todas las citas terminadas tienen cargo registrado ✔</td></tr>'
+    : sinCargo.map(rowHTML).join('');
 
   // Revisadas: salieron de "sin cargo" porque la coordinadora ya explicó en
   // la nota por qué está cubierta (ej. cargo hecho en otro periodo/paquete).
@@ -1947,20 +2080,8 @@ function renderCargos() {
   const tbodyRevisadas = document.getElementById('tbody-cargo-revisado');
   if (tbodyRevisadas) {
     tbodyRevisadas.innerHTML = revisadas.length === 0
-      ? '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px;">Sin casos revisados por nota</td></tr>'
-      : revisadas.map(r => {
-          const coord = getCoordByHistoria(r, getCiudad(r));
-          const c = getCiudad(r) || '—';
-          const fechaStr = fmtDate(r['Fecha']);
-          return `<tr>
-            <td class="td-muted">${fechaStr}</td>
-            <td class="td-name">${r['Apellidos, Nombre']||'—'}</td>
-            <td><span class="tag tag-${c.toLowerCase()}">${c}</span></td>
-            <td class="td-muted">${r['Concepto']||'—'}</td>
-            <td>${coord ? `<span class="badge b-teal">${coord}</span>` : '—'}</td>
-            ${notaCellHTML('sincargo', r['Apellidos, Nombre'], fechaStr, r['Concepto'])}
-          </tr>`;
-        }).join('');
+      ? '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:16px;">Sin casos revisados por nota</td></tr>'
+      : revisadas.map(rowHTML).join('');
   }
 
   show('loading-cargos', false);
