@@ -439,7 +439,7 @@
       <div class="kpi-card k-red"><div class="kpi-label">Sin cargo registrado</div><div class="kpi-num" id="g-sin">—</div><div class="kpi-sub">Posible cobro olvidado</div></div>
       <div class="kpi-card k-amber"><div class="kpi-label">% Cumplimiento</div><div class="kpi-num" id="g-pct">—</div><div class="kpi-sub">Cargos vs. citas terminadas</div></div>
     </div>
-    <p style="font-size:12px;color:var(--muted);margin:-8px 0 16px;">El cruce es por paciente + <strong>mes calendario</strong> de la cita, contra el <strong>servicio esperado</strong> (o uno afín del mismo paquete) — no basta con que la paciente tenga cualquier cargo en el periodo. "Inicio de tratamiento" es más estricto: exige el cargo del tratamiento que arranca (FIV, congelamiento o inseminación), sin aceptar servicios afines. Mismo motor que <a href="https://motero-fertilidad.github.io/auditoria-cargos/" target="_blank" style="color:var(--green-mid);font-weight:600;">Auditoría de Cargos ↗</a>.</p>
+    <p style="font-size:12px;color:var(--muted);margin:-8px 0 16px;">El cruce es por paciente + fecha cercana (hasta 45 días entre la cita y el cargo), contra el <strong>servicio esperado</strong> (o uno afín del mismo paquete) — no basta con que la paciente tenga cualquier cargo en el periodo. "Inicio de tratamiento" es más estricto: exige el cargo del tratamiento que arranca (FIV, congelamiento o inseminación), sin aceptar servicios afines. Los conceptos marcados "incluido/incluida" no requieren cargo aparte. Mismo motor que <a href="https://motero-fertilidad.github.io/auditoria-cargos/" target="_blank" style="color:var(--green-mid);font-weight:600;">Auditoría de Cargos ↗</a> (con esta ventana de días de tolerancia añadida).</p>
     <div class="section">
       <div class="sec-head"><div class="sec-title">Por coordinadora · cumplimiento de cargos</div></div>
       <div class="coord-grid" id="coord-grid-cargos"></div>
@@ -1919,6 +1919,10 @@ const CARGO_EXCLUIDOS = [
   ['revision post tratamiento',             'Va incluida al cargar el FIV, la inseminación o la vitrificación'],
   ['aplicacion de medicamento',             'Va incluida en el tratamiento, sin cargo propio'],
   ['seguimiento folicular',                 'Va incluido en el seguimiento del ciclo, sin cargo propio'],
+  // Todo concepto marcado "incluido/incluida" en su propio nombre ya viene
+  // dentro de otro servicio o paquete (ej. "Ultrasonido incluido", "Sesión
+  // de masaje incluida") -- no debe pedirse un cargo aparte para él.
+  ['incluid',                               'El concepto ya viene marcado como incluido'],
 ];
 function motivoExclusionCargo(concepto) {
   const c = normProf(concepto || '');
@@ -1945,13 +1949,19 @@ const difDiasCargo = (a,b) => Math.round((new Date(a) - new Date(b)) / 86400000)
 function renderCargos() {
   if (!state.citas || !state.cargos) return;
 
-  // Índice de cargos por paciente + mes calendario.
+  // Índice de cargos por paciente (todas sus fechas juntas; el filtro de
+  // cercanía en el tiempo se aplica después, por ventana de días -- no por
+  // mes calendario exacto, para no perder cargos capturados unos días antes
+  // o después del corte de mes, ej. cita el 30 de junio con su cargo
+  // registrado el 1-2 de julio).
   const idxCargos = {};
   state.cargos.forEach(c => {
     const f = fechaYMD(c['F. Cargo']);
-    const k = normName(c['Historia'] || '') + '|' + mesDeCargo(f);
+    const k = normName(c['Historia'] || '');
     (idxCargos[k] = idxCargos[k] || []).push({ row: c, srv: servicioDeCargo(c['Nombre Prod.']), f });
   });
+  // Ventana de tolerancia entre la fecha de la cita y la fecha del cargo.
+  const VENTANA_DIAS_CARGO = 45;
 
   const auditadas = state.citas.filter(r =>
     r['Estado'] === 'Terminada' &&
@@ -1970,7 +1980,9 @@ function renderCargos() {
     if (_matchCache.has(r)) return _matchCache.get(r);
     const esp = servicioEsperado(r['Concepto']);
     const fc = fechaYMD(r['Fecha']);
-    const pool = idxCargos[normName(r['Apellidos, Nombre'] || '') + '|' + mesDeCargo(fc)] || [];
+    const pool = (idxCargos[normName(r['Apellidos, Nombre'] || '')] || []).filter(c =>
+      (!fc || !c.f) ? true : Math.abs(difDiasCargo(c.f, fc)) <= VENTANA_DIAS_CARGO
+    );
     const afines = aceptaAfinesCargo(r['Concepto']) ? (AFINES_CARGO[esp] || []) : [];
 
     const elegir = filtro => {
