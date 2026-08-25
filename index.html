@@ -309,6 +309,11 @@
       <div class="kpi-card k-blue"><div class="kpi-label">HAM en Check up Gine</div><div class="kpi-num" id="a-hgine">—</div><div class="kpi-sub">Check up Ginecológico + HAM ($2,000)</div></div>
       <div class="kpi-card k-amber"><div class="kpi-label">Vitrificación desde Gine</div><div class="kpi-num" id="a-vitri">—</div><div class="kpi-sub">Gine → Vitrificación</div></div>
       <div class="kpi-card k-blue"><div class="kpi-label">EmbryoScope</div><div class="kpi-num" id="a-embryo">—</div><div class="kpi-sub">EmbryoScope / Kit Interno</div></div>
+      <div class="kpi-card k-green"><div class="kpi-label">Total vendido · semana</div><div class="kpi-num" id="a-monto-total">—</div><div class="kpi-sub">Suma de todos los add-ons (MXN)</div></div>
+    </div>
+    <div class="section">
+      <div class="sec-head"><div class="sec-title">Total vendido por coordinadora</div></div>
+      <div class="coord-grid" id="coord-grid-addons"></div>
     </div>
     <div class="section">
       <div class="sec-head"><div class="sec-title">Detalle de add-ons vendidos</div></div>
@@ -1601,6 +1606,32 @@ function renderAddons() {
   set('a-hgine', hgine);
   set('a-vitri', vitri);
   set('a-embryo', embryo);
+
+  // Total vendido (MXN) -- suma de "monto" (Tt Venta + IVA, o Total Venta si
+  // no hay IVA capturado) de todos los add-ons, en general y por
+  // coordinadora. Usa filteredAddons para que respete el filtro de
+  // coordinadora activo, igual que el resto de los KPIs de esta pestaña.
+  const montoTotal = filteredAddons.reduce((sum, a) => sum + (Number(a.monto) || 0), 0);
+  set('a-monto-total', '$' + montoTotal.toLocaleString('es-MX', {maximumFractionDigits: 0}));
+
+  const byCoordMonto = {};
+  COORD_LIST.forEach(c => byCoordMonto[c] = {n: 0, monto: 0});
+  addons.forEach(a => {
+    if (!a.coord || !byCoordMonto[a.coord]) return;
+    byCoordMonto[a.coord].n++;
+    byCoordMonto[a.coord].monto += (Number(a.monto) || 0);
+  });
+  document.getElementById('coord-grid-addons').innerHTML = COORD_LIST
+    .filter(c => byCoordMonto[c].n > 0)
+    .sort((a, b) => byCoordMonto[b].monto - byCoordMonto[a].monto)
+    .map(c => {
+      const {n, monto} = byCoordMonto[c];
+      return `<div class="coord-card cc-green">
+        <div class="coord-name">${c}</div>
+        <div class="coord-stat"><span class="cs-lbl">Add-ons vendidos</span><span class="cs-val">${n}</span></div>
+        <div class="coord-stat"><span class="cs-lbl">Total vendido</span><span class="cs-val v-green">$${monto.toLocaleString('es-MX', {maximumFractionDigits: 0})}</span></div>
+      </div>`;
+    }).join('');
 
   const CAT_COLORS = {
     'Donación de gametos':'b-green',
