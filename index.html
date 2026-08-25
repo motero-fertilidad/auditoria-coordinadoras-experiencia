@@ -1862,10 +1862,16 @@ function servicioDeCargo(nombreProd) {
 const REGLAS_CITA = [
   ['Subrogación', ['valoracion subrogada']],
   ['Wellness',    ['acupuntura','masaje','nutricion','terapia']],
-  ['Quirófano',   ['histeroscopia','biopsia','histerosonografia']],
+  // "Histerosonografía" se clasifica como Imagen (no Quirófano) para que
+  // coincida con REGLAS_CARGO -- es un ultrasonido de consultorio, no un
+  // procedimiento de quirófano, y así lo clasifica el lado de los cargos.
+  // Antes este desajuste hacía que una Histerosonografía SIEMPRE saliera
+  // "sin cargo" aunque su cargo exacto existiera, porque Quirófano no
+  // acepta Imagen como servicio afín.
+  ['Quirófano',   ['histeroscopia','biopsia']],
   ['Tratamiento', ['captura ovular','transferencia','inseminacion','inicio de tratamiento',
                    'congelamiento de muestra','en procedimiento']],
-  ['Imagen',      ['ultrasonido']],
+  ['Imagen',      ['ultrasonido','histerosonografia']],
   ['Laboratorio', ['toma de sangre','toma de cultivos','toma de muestra','espermatobioscopia',
                    'espermocultivo','fragmentacion','pap','aplicacion de medicamento',
                    'seguimiento folicular','inicio preparacion endometrial',
