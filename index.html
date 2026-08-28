@@ -1730,12 +1730,17 @@ function renderExperiencia() {
   // Solo incluir pacientes que sí asistieron (Estado === 'Terminada' en citas).
   // Si un paciente tiene alguna cita Terminada, se considera que asistió; si
   // todas sus citas están en No Asiste/Reasignada/Anulada, se excluye.
+  // Se guarda también el arreglo completo de sus citas (no solo el booleano)
+  // para poder revisar su clasificación real (Concepto/Procedencia de
+  // subrogación) más abajo.
   const citasByName = {};
+  const citasRowsByName = {};
   (state.citas || []).forEach(r => {
     const key = normName(r['Apellidos, Nombre'] || '');
     if (!key) return;
     if (!(key in citasByName)) citasByName[key] = false;
     if (r['Estado'] === 'Terminada') citasByName[key] = true;
+    (citasRowsByName[key] = citasRowsByName[key] || []).push(r);
   });
   function asistio(row) {
     const key = normName(row['paciente'] || '');
@@ -1743,9 +1748,31 @@ function renderExperiencia() {
     return citasByName[key];
   }
 
+  // Si la coordinadora escribió "subrogación" en la nota de esa paciente, se
+  // toma como corrección manual y manda a la paciente al grupo de
+  // Subrogación, sin importar qué diga el sheet de IT o sus citas.
+  function notaIndicaSubrogacion(paciente, dia_cita) {
+    const notas = getNotas();
+    const v = notas[notaKey('incompleto', paciente, dia_cita, null)] || '';
+    return /subrogaci/i.test(v);
+  }
+
+  // Coordinadora real de la paciente para Administrativo: 1) si la nota dice
+  // "subrogación", gana esa corrección manual; 2) si alguna de sus citas
+  // tiene Concepto/Procedencia de subrogación (misma clasificación que usan
+  // Cargos y Add-ons -- ver esSubrogacion()), es Subrogación aunque el sheet
+  // de IT tenga puesta otra coordinadora o "Externo"; 3) si no, se usa el
+  // valor de la columna "coordinadora" del sheet como antes.
+  function resolveCoordExp(row) {
+    if (notaIndicaSubrogacion(row['paciente'], row['dia_cita'])) return 'Subrogación';
+    const citasDeElla = citasRowsByName[normName(row['paciente'] || '')] || [];
+    if (citasDeElla.some(cr => esSubrogacion(cr))) return 'Subrogación';
+    return getCoordFromSheet(row);
+  }
+
   // Filter to audited coordinadoras only, applying coord filter
   const audited = rows.filter(r => {
-    const coord = getCoordFromSheet(r);
+    const coord = resolveCoordExp(r);
     if (!coord) return false;
     if (coordFilter && coord !== coordFilter) return false;
     if (!asistio(r)) return false;
@@ -1779,7 +1806,7 @@ function renderExperiencia() {
   const byCoord = {};
   COORD_LIST.forEach(c => byCoord[c] = {total:0, completo:0});
   audited.forEach(r => {
-    const coord = getCoordFromSheet(r);
+    const coord = resolveCoordExp(r);
     if (!coord || !byCoord[coord]) return;
     byCoord[coord].total++;
     if (isComplete(r) || notaResuelveIncompleto(r['paciente'], r['dia_cita'])) byCoord[coord].completo++;
@@ -1805,7 +1832,7 @@ function renderExperiencia() {
   document.getElementById('tbody-incompleto').innerHTML = incompleto.length === 0
     ? '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:24px;">Todos los expedientes están completos ✔</td></tr>'
     : incompleto.map(r => {
-        const coord = getCoordFromSheet(r);
+        const coord = resolveCoordExp(r);
         const sede = (r['sede_cita'] || r['sede'] || r['ciudad'] || '—');
         const badge = v => isSi(v)
           ? `<span class="badge b-green">Sí</span>`
@@ -1833,7 +1860,7 @@ function renderExperiencia() {
     tbodyRevisadosExp.innerHTML = revisadosPorNota.length === 0
       ? '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:16px;">Sin casos revisados por nota</td></tr>'
       : revisadosPorNota.map(r => {
-          const coord = getCoordFromSheet(r);
+          const coord = resolveCoordExp(r);
           const badge = v => isSi(v)
             ? `<span class="badge b-green">Sí</span>`
             : `<span class="badge b-red">No</span>`;
