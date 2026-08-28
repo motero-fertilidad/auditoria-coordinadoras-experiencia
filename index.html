@@ -312,10 +312,6 @@
       <div class="kpi-card k-green"><div class="kpi-label">Total vendido · semana</div><div class="kpi-num" id="a-monto-total">—</div><div class="kpi-sub">Suma de todos los add-ons (MXN)</div></div>
     </div>
     <div class="section">
-      <div class="sec-head"><div class="sec-title">Total vendido por coordinadora</div></div>
-      <div class="coord-grid" id="coord-grid-addons"></div>
-    </div>
-    <div class="section">
       <div class="sec-head"><div class="sec-title">Detalle de add-ons vendidos</div></div>
       <div class="tbl-wrap"><table>
         <thead><tr><th>Fecha</th><th>Paciente</th><th>Ciudad</th><th>Add-on</th><th>Categoría</th><th>Monto</th><th>Notas</th></tr></thead>
@@ -393,6 +389,18 @@
         <thead><tr><th>Fecha Consulta</th><th>Paciente</th><th>Ciudad</th><th>Tipo de consulta</th><th>Coordinadora</th><th>Días sin plática</th><th>Observaciones</th><th>Notas</th></tr></thead>
         <tbody id="tbody-sinplat"></tbody>
       </table></div>
+    </div>
+    <div class="section" style="margin-top:20px;">
+      <details>
+        <summary style="font-size:12.5px;font-weight:600;color:var(--muted);cursor:pointer;padding:4px 0;">
+          Revisadas por nota (cuentan como plática cumplida) <span class="pill pill-grey" id="pill-platica-revisado"></span>
+        </summary>
+        <p style="font-size:12px;color:var(--muted);margin:8px 0 10px;">Ninguna regla automática reconoció el caso, pero la coordinadora ya escribió una nota explicando qué pasó (ej. "no quiere", "se le llamó", "se informó por redes") — se saca de "sin plática" y cuenta como gestionada.</p>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Fecha</th><th>Paciente</th><th>Ciudad</th><th>Tipo</th><th>Coordinadora</th><th>Notas</th></tr></thead>
+          <tbody id="tbody-platica-revisado"></tbody>
+        </table></div>
+      </details>
     </div>
     <div class="section" style="margin-top:20px;">
       <div class="sec-head"><div class="sec-title">Se entregaron resultados en consulta</div><span class="pill pill-amber" id="pill-enconsulta"></span></div>
@@ -1197,6 +1205,19 @@ function notaDiceCargoResuelto(paciente, fechaStr, concepto) {
   const v = notas[notaKey('sincargo', paciente, fechaStr, concepto)];
   return !!(v && v.trim());
 }
+// Fallback genérico para Plática de resultados: si ninguno de los patrones
+// específicos (en consulta / no aplica) reconoció el texto de la nota --por
+// ejemplo notas cortas y libres como "No quiere", "Si se llamó", "Se informa
+// por medio de redes"-- cualquier nota no vacía saca a la paciente de "sin
+// plática" y se cuenta como revisada/gestionada por la coordinadora. Mismo
+// criterio que ya se usa en Cargos y Administrativo.
+function notaGenericaResuelvePlatica(paciente, fechaStr, concepto) {
+  const notas = getNotas();
+  return NOTA_TABLAS_PLATICA.some(t => {
+    const v = notas[notaKey(t, paciente, fechaStr, concepto)];
+    return !!(v && v.trim());
+  });
+}
 
 // Convierte montos en formato es-MX ("1.300,00" -> 1300, punto=miles, coma=decimales)
 // a un Number utilizable. Acepta también valores ya numéricos.
@@ -1608,30 +1629,11 @@ function renderAddons() {
   set('a-embryo', embryo);
 
   // Total vendido (MXN) -- suma de "monto" (Tt Venta + IVA, o Total Venta si
-  // no hay IVA capturado) de todos los add-ons, en general y por
-  // coordinadora. Usa filteredAddons para que respete el filtro de
-  // coordinadora activo, igual que el resto de los KPIs de esta pestaña.
+  // no hay IVA capturado). Usa filteredAddons para que respete el filtro de
+  // coordinadora activo: si hay una coordinadora seleccionada, este total es
+  // solo el de ella; si es "Todas", es el total general.
   const montoTotal = filteredAddons.reduce((sum, a) => sum + (Number(a.monto) || 0), 0);
   set('a-monto-total', '$' + montoTotal.toLocaleString('es-MX', {maximumFractionDigits: 0}));
-
-  const byCoordMonto = {};
-  COORD_LIST.forEach(c => byCoordMonto[c] = {n: 0, monto: 0});
-  addons.forEach(a => {
-    if (!a.coord || !byCoordMonto[a.coord]) return;
-    byCoordMonto[a.coord].n++;
-    byCoordMonto[a.coord].monto += (Number(a.monto) || 0);
-  });
-  document.getElementById('coord-grid-addons').innerHTML = COORD_LIST
-    .filter(c => byCoordMonto[c].n > 0)
-    .sort((a, b) => byCoordMonto[b].monto - byCoordMonto[a].monto)
-    .map(c => {
-      const {n, monto} = byCoordMonto[c];
-      return `<div class="coord-card cc-green">
-        <div class="coord-name">${c}</div>
-        <div class="coord-stat"><span class="cs-lbl">Add-ons vendidos</span><span class="cs-val">${n}</span></div>
-        <div class="coord-stat"><span class="cs-lbl">Total vendido</span><span class="cs-val v-green">$${monto.toLocaleString('es-MX', {maximumFractionDigits: 0})}</span></div>
-      </div>`;
-    }).join('');
 
   const CAT_COLORS = {
     'Donación de gametos':'b-green',
@@ -2212,6 +2214,7 @@ function computePlatica(rows, coordFilter) {
     else if (enConsulta) status = 'en_consulta';
     else if (noContesta) status = 'no_contesta';
     else if (tienePlatica) status = 'completa';
+    else if (notaGenericaResuelvePlatica(r['Apellidos, Nombre'], fechaStr, r['Concepto'])) status = 'revisada_nota';
     else status = 'sin_platica';
 
     return { ...r, name, status, coord, c, fechaStr, dias, obs };
@@ -2245,6 +2248,10 @@ function computePlatica(rows, coordFilter) {
   const enConsulta = results.filter(r=>r.status==='en_consulta');
   const noContesta = results.filter(r=>r.status==='no_contesta');
   const noAplica = results.filter(r=>r.status==='no_aplica');
+  // Casos que ninguna regla específica reconoció, pero la coordinadora ya
+  // escribió una nota (cualquier texto) explicando qué pasó -- se sacan de
+  // "sin plática" y se muestran aparte, como en Cargos/Administrativo.
+  const revisadaNota = results.filter(r=>r.status==='revisada_nota');
 
   // "Paciente no contesta" no cuenta en el % de plática registrada — ahí la
   // coordinadora sí hizo su trabajo, es la paciente quien no responde. Se
@@ -2255,13 +2262,15 @@ function computePlatica(rows, coordFilter) {
   // ya recibió sus resultados (en la consulta, con estudios previos, o por
   // llamada), solo no quedó registrado como una cita de "Plática de
   // resultados" aparte en Vrepro. No deben castigar a la coordinadora.
-  const cumplidas = completa.length + enConsulta.length;
+  // Los "revisados por nota" también cuentan como cumplidos -- la
+  // coordinadora ya gestionó el caso y lo documentó.
+  const cumplidas = completa.length + enConsulta.length + revisadaNota.length;
 
-  return { results, sinPlatica, completa, enConsulta, noContesta, noAplica, totalParaPct, cumplidas };
+  return { results, sinPlatica, completa, enConsulta, noContesta, noAplica, revisadaNota, totalParaPct, cumplidas };
 }
 
 function renderPlatica() {
-  const { sinPlatica, completa, enConsulta, noContesta, noAplica, totalParaPct, cumplidas } =
+  const { sinPlatica, completa, enConsulta, noContesta, noAplica, revisadaNota, totalParaPct, cumplidas } =
     computePlatica(state.citas, activeFilters['platica']);
 
   set('p-total', totalParaPct);
@@ -2274,6 +2283,8 @@ function renderPlatica() {
   set('p-no-pct', totalParaPct>0 ? Math.round(sinPlatica.length/totalParaPct*100)+'% del total' : '—');
 
   document.getElementById('pill-sinplat').textContent = sinPlatica.length + ' pacientes';
+  const pillPlaticaRevisado = document.getElementById('pill-platica-revisado');
+  if (pillPlaticaRevisado) pillPlaticaRevisado.textContent = revisadaNota.length + ' pacientes';
   document.getElementById('pill-enconsulta').textContent = enConsulta.length + ' pacientes';
   document.getElementById('pill-completa').textContent = completa.length + ' pacientes';
   document.getElementById('pill-nocontesta').textContent = noContesta.length + ' pacientes';
@@ -2301,6 +2312,20 @@ function renderPlatica() {
         <td class="td-obs" title="${r.obs}">${r.obs.slice(0,80)||'—'}</td>
         ${notaCellHTML('platica', r['Apellidos, Nombre'], r.fechaStr, r['Concepto'])}
       </tr>`).join('');
+
+  const tbodyPlaticaRevisado = document.getElementById('tbody-platica-revisado');
+  if (tbodyPlaticaRevisado) {
+    tbodyPlaticaRevisado.innerHTML = revisadaNota.length === 0
+      ? '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px;">Sin casos revisados por nota</td></tr>'
+      : revisadaNota.map(r => `<tr>
+          <td class="td-muted">${r.fechaStr}</td>
+          <td class="td-name">${r['Apellidos, Nombre']||'—'}</td>
+          <td><span class="tag tag-${r.c.toLowerCase()}">${r.c}</span></td>
+          <td class="td-muted">${r['Concepto']||'—'}</td>
+          <td>${r.coord?`<span class="badge b-teal">${r.coord}</span>`:'<span class="td-muted">—</span>'}</td>
+          ${notaCellHTML('platica', r['Apellidos, Nombre'], r.fechaStr, r['Concepto'])}
+        </tr>`).join('');
+  }
 
   document.getElementById('tbody-enconsulta').innerHTML = enConsulta.length === 0
     ? '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px;">Sin casos en esta categoría</td></tr>'
@@ -2402,9 +2427,10 @@ function renderResumen() {
     if (!coord || !byCoord[coord]) return;
     if (isPV(r['Concepto']) && isPVCountable(r['Estado']) && !isExternal(r)) byCoord[coord].pv++;
   });
-  // "Pláticas cumplidas" por coordinadora = plática registrada en Vrepro o
-  // resultados ya entregados en consulta.
-  [...plat.completa, ...plat.enConsulta].forEach(r => {
+  // "Pláticas cumplidas" por coordinadora = plática registrada en Vrepro,
+  // resultados ya entregados en consulta, o casos ya revisados/gestionados
+  // por nota (ver computePlatica -> revisadaNota).
+  [...plat.completa, ...plat.enConsulta, ...plat.revisadaNota].forEach(r => {
     if (r.coord && byCoord[r.coord]) byCoord[r.coord].plat++;
   });
   sinPlatica.forEach(r => {
