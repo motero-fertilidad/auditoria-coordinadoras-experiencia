@@ -1787,6 +1787,7 @@ function renderExperiencia() {
   // en la pestaña de Cargos, cualquier nota no vacía se toma como que ya
   // se revisó el caso.
   function notaResuelveIncompleto(paciente, dia_cita) {
+    if (notaIndicaSubrogacion(paciente, dia_cita)) return false;
     const notas = getNotas();
     const v = notas[notaKey('incompleto', paciente, dia_cita, null)];
     return !!(v && v.trim());
