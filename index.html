@@ -2232,6 +2232,27 @@ function computePlatica(rows, coordFilter) {
     return { ...r, name, status, coord, c, fechaStr, dias, obs };
   });
 
+  // Una misma paciente puede tener más de una cita "con estudio" en el mismo
+  // corte (ej. Check up Ginecológico + Fertility Check up días después), y a
+  // veces la coordinadora deja los resultados para la SIGUIENTE consulta
+  // ("se le darán resultados en su siguiente consulta") -- esa nota, por sí
+  // sola, no dice "ya se entregaron". Pero si ESA otra consulta de la misma
+  // paciente sí quedó marcada como resuelta (ya se entregaron resultados,
+  // hay plática registrada, o hay nota), entonces la paciente en realidad ya
+  // está cubierta -- no debe seguir apareciendo como "sin plática" solo
+  // porque una de sus dos citas, en particular, no trae el comentario de
+  // entrega.
+  const nombresResueltosEnOtraCita = new Set(
+    resultsBase
+      .filter(r => r.status === 'completa' || r.status === 'en_consulta' || r.status === 'revisada_nota')
+      .map(r => r.name)
+  );
+  resultsBase.forEach(r => {
+    if (r.status === 'sin_platica' && nombresResueltosEnOtraCita.has(r.name)) {
+      r.status = 'en_consulta';
+    }
+  });
+
   // Pacientes con una plática de resultados registrada esta semana cuya
   // "primera vez con estudio" no aparece en este mismo archivo de citas (ej.
   // su primera vez fue en un periodo anterior, fuera de este export). Sin
