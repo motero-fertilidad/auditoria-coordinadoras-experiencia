@@ -2748,7 +2748,16 @@ function celdaAddons(v, prev) {
   return `<strong>$${Math.round(v.monto).toLocaleString('es-MX')}</strong>${deltaRelativo(v.monto, prevMonto)}<br><span style="font-size:10.5px;color:var(--muted);">${v.count} add-ons</span>`;
 }
 
-function renderTablaEvolucion(containerId, meses, dataPorMes, cellFn, rowOrder, rowHeaderLabel) {
+// Suma una lista de campos numéricos (ej. num/total, pv/cap, monto/count)
+// across todas las coordinadoras/clínicas de un mes, para la fila "Total".
+function sumTotalMes(dataDelMes, keys) {
+  const vals = Object.values(dataDelMes || {});
+  const out = {};
+  keys.forEach(k => { out[k] = vals.reduce((acc, v) => acc + (Number(v[k]) || 0), 0); });
+  return out;
+}
+
+function renderTablaEvolucion(containerId, meses, dataPorMes, cellFn, rowOrder, rowHeaderLabel, totalFn) {
   const el = document.getElementById(containerId);
   if (!el) return;
   const orderList = rowOrder || COORD_LIST;
@@ -2769,7 +2778,17 @@ function renderTablaEvolucion(containerId, meses, dataPorMes, cellFn, rowOrder, 
     }).join('');
     return `<tr><td class="td-name">${row}</td>${cells}</tr>`;
   }).join('');
-  el.innerHTML = `<div class="tbl-wrap"><table><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+  let totalRow = '';
+  if (totalFn) {
+    const totalCells = meses.map((m, i) => {
+      const cur = totalFn(dataPorMes[m] || {});
+      const prevMes = i > 0 ? meses[i-1] : null;
+      const prev = prevMes ? totalFn(dataPorMes[prevMes] || {}) : null;
+      return `<td style="text-align:center;">${cellFn(cur, prev)}</td>`;
+    }).join('');
+    totalRow = `<tr style="font-weight:700;background:#f9fafb;border-top:2px solid var(--border);"><td class="td-name">Total</td>${totalCells}</tr>`;
+  }
+  el.innerHTML = `<div class="tbl-wrap"><table><thead>${head}</thead><tbody>${body}${totalRow}</tbody></table></div>`;
 }
 
 // Paleta fija de colores para que cada coordinadora/clínica se vea siempre
@@ -2837,10 +2856,14 @@ function renderGraficaEvolucion(canvasId, meses, dataPorMes, valueFn, rowOrder, 
 
 function renderEvolucion() {
   const { meses, data } = computeEvolucionMensual();
-  renderTablaEvolucion('tabla-evol-platica', meses, data.platica, celdaPct);
-  renderTablaEvolucion('tabla-evol-administrativo', meses, data.administrativo, celdaPct);
-  renderTablaEvolucion('tabla-evol-conversion', meses, data.conversion, celdaConversion, CLINICAS_FISICAS.map(g => g.label), 'Clínica');
-  renderTablaEvolucion('tabla-evol-addons', meses, data.addons, celdaAddons);
+  renderTablaEvolucion('tabla-evol-platica', meses, data.platica, celdaPct, undefined, undefined,
+    v => sumTotalMes(v, ['num', 'total']));
+  renderTablaEvolucion('tabla-evol-administrativo', meses, data.administrativo, celdaPct, undefined, undefined,
+    v => sumTotalMes(v, ['num', 'total']));
+  renderTablaEvolucion('tabla-evol-conversion', meses, data.conversion, celdaConversion, CLINICAS_FISICAS.map(g => g.label), 'Clínica',
+    v => sumTotalMes(v, ['pv', 'cap']));
+  renderTablaEvolucion('tabla-evol-addons', meses, data.addons, celdaAddons, undefined, undefined,
+    v => sumTotalMes(v, ['monto', 'count']));
 
   renderGraficaEvolucion('chart-evol-platica', meses, data.platica,
     v => v.total ? Math.round(v.num / v.total * 100) : null, COORD_LIST, v => v + '%');
