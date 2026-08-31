@@ -446,23 +446,28 @@
     <p style="font-size:12px;color:var(--muted);margin:0 0 16px;" id="evol-info"></p>
     <div class="section">
       <div class="sec-head"><div class="sec-title">Plática de resultados · % cumplida por mes</div></div>
+      <div style="height:220px;margin-bottom:14px;"><canvas id="chart-evol-platica"></canvas></div>
       <div id="tabla-evol-platica"></div>
     </div>
     <div class="section" style="margin-top:20px;">
       <div class="sec-head"><div class="sec-title">Administrativo · % expediente completo por mes</div></div>
+      <div style="height:220px;margin-bottom:14px;"><canvas id="chart-evol-administrativo"></canvas></div>
       <div id="tabla-evol-administrativo"></div>
     </div>
     <div class="section" style="margin-top:20px;">
       <div class="sec-head"><div class="sec-title">Conversión por clínica · % primeras veces → captura ovular por mes</div></div>
+      <div style="height:220px;margin-bottom:14px;"><canvas id="chart-evol-conversion"></canvas></div>
       <div id="tabla-evol-conversion"></div>
     </div>
     <div class="section" style="margin-top:20px;">
       <div class="sec-head"><div class="sec-title">Add-ons · vendido (MXN) por mes</div></div>
+      <div style="height:220px;margin-bottom:14px;"><canvas id="chart-evol-addons"></canvas></div>
       <div id="tabla-evol-addons"></div>
     </div>
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.5.1/chart.umd.min.js"></script>
 <script>
 // ─── STATE ───────────────────────────────────────────────────────────────────
 const state = { citas_gdl: null, citas_cdmx: null, citas_met: null, cargos: null, sheetIT: null, experiencia: null };
@@ -2566,8 +2571,13 @@ function platicaPorCoordDeMes(citas) {
   // de la coordinadora que realmente dio la plática -- desalineando esta tabla
   // de lo que se ve en la pestaña en vivo. Por eso aquí se llama
   // computePlatica una vez POR CADA coordinadora, igual que hace la pestaña.
+  // Yanelli y Subrogación no se muestran en esta tabla de Evolución mensual
+  // (a petición explícita) aunque sí sigan existiendo como coordinadoras en
+  // el resto del dashboard.
+  const EXCLUIR_DE_PLATICA_MES = new Set(['Yanelli', 'Subrogación']);
   const byCoord = {};
   COORD_LIST.forEach(coord => {
+    if (EXCLUIR_DE_PLATICA_MES.has(coord)) return;
     const r = computePlatica(citas, coord);
     if (r.totalParaPct > 0) byCoord[coord] = { num: r.cumplidas, total: r.totalParaPct };
   });
@@ -2741,12 +2751,84 @@ function renderTablaEvolucion(containerId, meses, dataPorMes, cellFn, rowOrder, 
   el.innerHTML = `<div class="tbl-wrap"><table><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
 }
 
+// Paleta fija de colores para que cada coordinadora/clínica se vea siempre
+// con el mismo color entre gráficas y entre recargas de la página.
+const EVOL_COLORS = ['#2563eb','#16a34a','#f59e0b','#dc2626','#8b5cf6','#0891b2','#db2777','#65a30d','#ea580c','#4f46e5','#059669','#facc15'];
+function colorEvol(label, orderList) {
+  const i = orderList.indexOf(label);
+  return EVOL_COLORS[(i >= 0 ? i : 0) % EVOL_COLORS.length];
+}
+
+const evolCharts = {};
+function renderGraficaEvolucion(canvasId, meses, dataPorMes, valueFn, rowOrder, yFmt) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  if (evolCharts[canvasId]) { evolCharts[canvasId].destroy(); delete evolCharts[canvasId]; }
+  if (typeof Chart === 'undefined') { canvas.style.display = 'none'; return; }
+
+  const orderList = rowOrder || COORD_LIST;
+  const rowsSet = new Set();
+  meses.forEach(m => Object.keys(dataPorMes[m] || {}).forEach(c => rowsSet.add(c)));
+  const rows = orderList.filter(c => rowsSet.has(c));
+
+  if (!rows.length || meses.length < 2) {
+    // Con un solo mes no hay tendencia que graficar -- se deja solo la tabla.
+    canvas.style.display = 'none';
+    return;
+  }
+  canvas.style.display = 'block';
+
+  const datasets = rows.map(row => {
+    const color = colorEvol(row, orderList);
+    return {
+      label: row,
+      data: meses.map(m => {
+        const v = (dataPorMes[m] || {})[row];
+        return v ? valueFn(v) : null;
+      }),
+      borderColor: color,
+      backgroundColor: color,
+      spanGaps: true,
+      tension: 0.25,
+      pointRadius: 3,
+      pointHoverRadius: 5,
+    };
+  });
+
+  evolCharts[canvasId] = new Chart(canvas.getContext('2d'), {
+    type: 'line',
+    data: { labels: meses.map(mesLabel), datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'nearest', intersect: false },
+      plugins: {
+        legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10.5 }, padding: 10 } },
+        tooltip: { callbacks: { label: ctx => `${ctx.dataset.label}: ${yFmt ? yFmt(ctx.parsed.y) : ctx.parsed.y}` } },
+      },
+      scales: {
+        y: { ticks: { callback: v => yFmt ? yFmt(v) : v, font: { size: 10.5 } } },
+        x: { ticks: { font: { size: 10.5 } } },
+      },
+    },
+  });
+}
+
 function renderEvolucion() {
   const { meses, data } = computeEvolucionMensual();
   renderTablaEvolucion('tabla-evol-platica', meses, data.platica, celdaPct);
   renderTablaEvolucion('tabla-evol-administrativo', meses, data.administrativo, celdaPct);
   renderTablaEvolucion('tabla-evol-conversion', meses, data.conversion, celdaConversion, CLINICAS_FISICAS.map(g => g.label), 'Clínica');
   renderTablaEvolucion('tabla-evol-addons', meses, data.addons, celdaAddons);
+
+  renderGraficaEvolucion('chart-evol-platica', meses, data.platica,
+    v => v.total ? Math.round(v.num / v.total * 100) : null, COORD_LIST, v => v + '%');
+  renderGraficaEvolucion('chart-evol-administrativo', meses, data.administrativo,
+    v => v.total ? Math.round(v.num / v.total * 100) : null, COORD_LIST, v => v + '%');
+  renderGraficaEvolucion('chart-evol-conversion', meses, data.conversion,
+    v => v.pv ? Math.round(v.cap / v.pv * 100) : null, CLINICAS_FISICAS.map(g => g.label), v => v + '%');
+  renderGraficaEvolucion('chart-evol-addons', meses, data.addons,
+    v => Math.round(v.monto), COORD_LIST, v => '$' + Math.round(v).toLocaleString('es-MX'));
 
   const totalSnapshots = getHistorialCombinado().length;
   const info = document.getElementById('evol-info');
