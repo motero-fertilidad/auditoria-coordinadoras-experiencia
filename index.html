@@ -2514,7 +2514,7 @@ function buildMonthlyDatasets() {
   // y luego, aparte, "01-jul al 31-jul"), el más RECIENTEMENTE GUARDADO gana
   // el cruce por fila -- así, si vuelves a guardar un periodo con datos más
   // completos/actualizados, esos son los que se usan.
-  const historial = getHistorial().slice().sort((a, b) =>
+  const historial = getHistorialCombinado().slice().sort((a, b) =>
     new Date(b.fecha_guardado || 0) - new Date(a.fecha_guardado || 0));
   const citasSeen = new Set();
   const cargosSeen = new Set();
@@ -2556,14 +2556,20 @@ function buildMonthlyDatasets() {
 }
 
 function platicaPorCoordDeMes(citas) {
-  const plat = computePlatica(citas, null);
+  // computePlatica(citas, coordFilter) tiene una regla especial ("extraCompleta")
+  // para pacientes cuya plática de resultados la dio una coordinadora distinta a
+  // la de su primera vez -- ese caso se le suma como "completa" a QUIEN DIO LA
+  // PLÁTICA, igual que en la pestaña "Plática de Resultados" cuando filtras por
+  // esa coordinadora ahí. Si en vez de eso calculamos una sola vez con
+  // coordFilter=null y agrupamos por r.coord, esos pacientes se le quedan
+  // pegados solo a la coordinadora de su primera vez y desaparecen por completo
+  // de la coordinadora que realmente dio la plática -- desalineando esta tabla
+  // de lo que se ve en la pestaña en vivo. Por eso aquí se llama
+  // computePlatica una vez POR CADA coordinadora, igual que hace la pestaña.
   const byCoord = {};
-  plat.results.forEach(r => {
-    if (!r.coord) return;
-    if (r.status === 'no_contesta' || r.status === 'no_aplica') return;
-    if (!byCoord[r.coord]) byCoord[r.coord] = { num: 0, total: 0 };
-    byCoord[r.coord].total++;
-    if (r.status === 'completa' || r.status === 'en_consulta' || r.status === 'revisada_nota') byCoord[r.coord].num++;
+  COORD_LIST.forEach(coord => {
+    const r = computePlatica(citas, coord);
+    if (r.totalParaPct > 0) byCoord[coord] = { num: r.cumplidas, total: r.totalParaPct };
   });
   return byCoord;
 }
@@ -2742,7 +2748,7 @@ function renderEvolucion() {
   renderTablaEvolucion('tabla-evol-conversion', meses, data.conversion, celdaConversion, CLINICAS_FISICAS.map(g => g.label), 'Clínica');
   renderTablaEvolucion('tabla-evol-addons', meses, data.addons, celdaAddons);
 
-  const totalSnapshots = getHistorial().length;
+  const totalSnapshots = getHistorialCombinado().length;
   const info = document.getElementById('evol-info');
   if (info) {
     info.textContent = meses.length > 0
@@ -2839,62 +2845,61 @@ async function autoLoadFromGitHub() {
 // Carga automáticamente, desde la carpeta historial/ del repo, los
 // snapshots mensuales "oficiales" (los que se suben ahí a propósito para que
 // Evolución mensual tenga datos sin que cada quien tenga que usar el botón
-// "Importar .json" a mano en su propio navegador). El repo es la fuente de
-// verdad: si ya existe un snapshot con el mismo label en el Historial de
-// este navegador (por ejemplo porque la usuaria lo guardó/importó ella
-// misma antes de que existiera este archivo en el repo, con datos
-// desactualizados), se REEMPLAZA por la versión del repo siempre que esta
-// sea igual o más reciente (fecha_guardado). Así el dashboard se autocorrige
-// solo con solo recargar la página, sin que nadie tenga que limpiar su
-// navegador a mano.
+// "Importar .json" a mano en su propio navegador).
+//
+// IMPORTANTE: estos snapshots del repo se guardan SOLO EN MEMORIA
+// (historialRepo), nunca en localStorage. Tres meses de citas+cargos+
+// expedientes ya pesan >10MB como texto, y localStorage tiene un límite de
+// unos 5-10MB según el navegador -- si intentábamos guardarlos ahí, en
+// algunos navegadores fallaba silenciosamente ("no hay espacio") y encima
+// le quitaba espacio a los snapshots que la usuaria sí guarda a mano con
+// "Guardar semana"/"Importar .json". Al mantenerlos solo en memoria, se
+// vuelven a descargar (rápido, son archivos estáticos) cada vez que se abre
+// la página, sin pelearse por espacio con nada más.
+let historialRepo = [];
+
 async function autoLoadHistorialFromGitHub() {
   try {
     const res = await fetch('historial/manifest.json?' + Date.now(), {cache:'no-cache'});
     if (!res.ok) return;
     const files = await res.json();
     if (!Array.isArray(files) || files.length === 0) return;
-    const historial = getHistorial();
-    const indexPorLabel = new Map(historial.map((h, i) => [h.label, i]));
-    let cambio = false;
+    const cargados = [];
     for (const fname of files) {
       try {
         const r2 = await fetch('historial/' + fname + '?' + Date.now(), {cache:'no-cache'});
         if (!r2.ok) continue;
         const snap = await r2.json();
         if (!snap || !snap.label || !snap.state) continue;
-        if (indexPorLabel.has(snap.label)) {
-          const idx = indexPorLabel.get(snap.label);
-          const existente = historial[idx];
-          const fechaExistente = new Date(existente.fecha_guardado || 0).getTime();
-          const fechaRepo = new Date(snap.fecha_guardado || 0).getTime();
-          if (fechaRepo >= fechaExistente && JSON.stringify(existente) !== JSON.stringify(snap)) {
-            historial[idx] = snap;
-            cambio = true;
-          }
-        } else {
-          historial.push(snap);
-          indexPorLabel.set(snap.label, historial.length - 1);
-          cambio = true;
-        }
+        cargados.push(snap);
       } catch (e) {
         console.warn('No se pudo cargar historial/' + fname + ':', e.message);
       }
     }
-    if (cambio) {
-      try {
-        localStorage.setItem(HIST_KEY, JSON.stringify(historial));
-      } catch (e) {
-        console.warn('No se pudo guardar el historial cargado del repo (almacenamiento local lleno):', e.message);
-        return;
-      }
-      renderHistorialPanel();
-      if (document.getElementById('panel-evolucion') && document.getElementById('panel-evolucion').classList.contains('active')) {
-        renderEvolucion();
-      }
+    historialRepo = cargados;
+    renderHistorialPanel();
+    if (document.getElementById('panel-evolucion') && document.getElementById('panel-evolucion').classList.contains('active')) {
+      renderEvolucion();
     }
   } catch (e) {
     console.warn('No se pudo cargar el historial del repo:', e.message);
   }
+}
+
+// Combina el historial guardado a mano en este navegador (localStorage) con
+// el cargado automáticamente del repo (en memoria). Si el mismo label existe
+// en ambos lados, gana el que tenga fecha_guardado más reciente.
+function getHistorialCombinado() {
+  const local = getHistorial();
+  const porLabel = new Map(local.map(h => [h.label, h]));
+  historialRepo.forEach(snap => {
+    const existente = porLabel.get(snap.label);
+    if (!existente) { porLabel.set(snap.label, snap); return; }
+    const fechaExistente = new Date(existente.fecha_guardado || 0).getTime();
+    const fechaRepo = new Date(snap.fecha_guardado || 0).getTime();
+    if (fechaRepo >= fechaExistente) porLabel.set(snap.label, snap);
+  });
+  return Array.from(porLabel.values());
 }
 
 window.addEventListener('load', () => {
@@ -3154,11 +3159,27 @@ function importarSnapshot(input) {
 function renderHistorialPanel() {
   const historial = getHistorial();
   const lista = document.getElementById('historial-lista');
+
+  // Bloque informativo (solo lectura) con lo que se cargó automáticamente
+  // desde la carpeta historial/ del repo -- vive en memoria, no en este
+  // navegador, así que no aparece en la lista de abajo ni se puede borrar
+  // desde aquí (se actualiza subiendo un nuevo archivo al repo).
+  let repoHtml = '';
+  if (historialRepo.length) {
+    repoHtml = `<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:12px 14px;margin-bottom:16px;">
+      <div style="font-weight:700;font-size:12px;color:#0369a1;margin-bottom:6px;">📦 Cargados automáticamente del repositorio (para Evolución mensual)</div>
+      ${historialRepo.map(h => {
+        const nCitas = (h.state.citas_gdl||[]).length + (h.state.citas_cdmx||[]).length + (h.state.citas_met||[]).length;
+        return `<div style="font-size:12px;color:#0c4a6e;padding:2px 0;">· ${h.label} — ${nCitas} citas</div>`;
+      }).join('')}
+    </div>`;
+  }
+
   if (!historial.length) {
-    lista.innerHTML = '<p style="color:#888;font-size:13px;text-align:center;margin-top:40px;">No hay semanas guardadas aún.<br>Carga datos y presiona 💾 Guardar semana.</p>';
+    lista.innerHTML = repoHtml + '<p style="color:#888;font-size:13px;text-align:center;margin-top:20px;">No hay semanas guardadas a mano en este navegador.<br>Carga datos y presiona 💾 Guardar semana.</p>';
     return;
   }
-  lista.innerHTML = historial.map((h, i) => {
+  lista.innerHTML = repoHtml + historial.map((h, i) => {
     const fecha = new Date(h.fecha_guardado).toLocaleDateString('es-MX', {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
     const nCitas = (h.state.citas_gdl||[]).length + (h.state.citas_cdmx||[]).length + (h.state.citas_met||[]).length;
     return `<div style="border:1px solid #e5e7eb;border-radius:10px;padding:14px;margin-bottom:12px;">
