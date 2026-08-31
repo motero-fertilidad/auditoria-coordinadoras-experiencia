@@ -229,7 +229,7 @@
   <div class="tab"        id="tab-addons"     onclick="showTab('addons')">Add-ons</div>
   <div class="tab"        id="tab-experiencia"onclick="showTab('experiencia')">Administrativo</div>
   <div class="tab"        id="tab-platica"    onclick="showTab('platica')">Plática de Resultados</div>
-  <div class="tab"        id="tab-cargos"     onclick="showTab('cargos')">Cargos</div>
+  <div class="tab"        id="tab-evolucion"  onclick="showTab('evolucion')">Evolución mensual</div>
 </div>
 
 <!-- PANEL: RESUMEN -->
@@ -437,44 +437,28 @@
 </div>
 
 <!-- PANEL: CARGOS -->
-<div class="panel" id="panel-cargos">
-  <div class="loading-state" id="loading-cargos">
-    <h2>Carga los archivos de Citas y Cargos</h2>
-    <p>Esta auditoría cruza las citas <strong>Terminada</strong> contra el archivo de <strong>Cargos</strong> para detectar pacientes que se atendieron pero no tienen ningún cargo registrado.</p>
+<div class="panel" id="panel-evolucion">
+  <div class="loading-state" id="loading-evolucion">
+    <h2>Evolución mensual</h2>
+    <p>Esta vista junta los snapshots guardados en tu <strong>Historial</strong> (botón "Guardar semana", o "Importar .json" para tus respaldos) y recalcula, por coordinadora y por mes, los mismos indicadores de las otras pestañas — para ver la tendencia.</p>
   </div>
-  <div id="content-cargos" style="display:none;">
-    <div class="filter-bar" id="filter-cargos">
-      <label>Coordinadora:</label>
-    </div>
-    <div class="kpi-grid">
-      <div class="kpi-card k-neutral"><div class="kpi-label">Citas terminadas auditadas</div><div class="kpi-num" id="g-total">—</div><div class="kpi-sub">Excluye bloques de Gestión Administrativa</div></div>
-      <div class="kpi-card k-green"><div class="kpi-label">Con cargo registrado</div><div class="kpi-num" id="g-con">—</div><div class="kpi-sub">La paciente tiene al menos un cargo en el periodo</div></div>
-      <div class="kpi-card k-red"><div class="kpi-label">Sin cargo registrado</div><div class="kpi-num" id="g-sin">—</div><div class="kpi-sub">Posible cobro olvidado</div></div>
-      <div class="kpi-card k-amber"><div class="kpi-label">% Cumplimiento</div><div class="kpi-num" id="g-pct">—</div><div class="kpi-sub">Cargos vs. citas terminadas</div></div>
-    </div>
-    <p style="font-size:12px;color:var(--muted);margin:-8px 0 16px;">El cruce es por paciente + fecha cercana (hasta 45 días entre la cita y el cargo), contra el <strong>servicio esperado</strong> (o uno afín del mismo paquete) — no basta con que la paciente tenga cualquier cargo en el periodo. "Inicio de tratamiento" es más estricto: exige el cargo del tratamiento que arranca (FIV, congelamiento o inseminación), sin aceptar servicios afines. Los conceptos marcados "incluido/incluida" no requieren cargo aparte. Mismo motor que <a href="https://motero-fertilidad.github.io/auditoria-cargos/" target="_blank" style="color:var(--green-mid);font-weight:600;">Auditoría de Cargos ↗</a> (con esta ventana de días de tolerancia añadida).</p>
+  <div id="content-evolucion" style="display:none;">
+    <p style="font-size:12px;color:var(--muted);margin:0 0 16px;" id="evol-info"></p>
     <div class="section">
-      <div class="sec-head"><div class="sec-title">Por coordinadora · cumplimiento de cargos</div></div>
-      <div class="coord-grid" id="coord-grid-cargos"></div>
+      <div class="sec-head"><div class="sec-title">Plática de resultados · % cumplida por mes</div></div>
+      <div id="tabla-evol-platica"></div>
     </div>
     <div class="section" style="margin-top:20px;">
-      <div class="sec-head"><div class="sec-title">Pacientes con cita terminada sin cargo</div><span class="pill pill-red" id="pill-sincargo"></span></div>
-      <p style="font-size:12px;color:var(--muted);margin:-4px 0 10px;">Si el cargo ya se hizo (ej. en un periodo anterior, o como parte de un paquete), escribe la razón en la columna de Notas — el caso se moverá automáticamente a "Revisadas" y ya no contará como pendiente.</p>
-      <div class="tbl-wrap"><table>
-        <thead><tr><th>Fecha</th><th>Paciente</th><th>Ciudad</th><th>Concepto</th><th>Servicio esperado</th><th>Lo que sí se le cobró</th><th>Coordinadora</th><th>Notas</th></tr></thead>
-        <tbody id="tbody-sincargo"></tbody>
-      </table></div>
+      <div class="sec-head"><div class="sec-title">Administrativo · % expediente completo por mes</div></div>
+      <div id="tabla-evol-administrativo"></div>
     </div>
     <div class="section" style="margin-top:20px;">
-      <details>
-        <summary style="font-size:12.5px;font-weight:600;color:var(--muted);cursor:pointer;padding:4px 0;">
-          Revisadas con nota (ya no cuentan como pendientes) <span class="pill pill-grey" id="pill-cargo-revisado"></span>
-        </summary>
-        <div class="tbl-wrap" style="margin-top:8px;"><table>
-          <thead><tr><th>Fecha</th><th>Paciente</th><th>Ciudad</th><th>Concepto</th><th>Servicio esperado</th><th>Lo que sí se le cobró</th><th>Coordinadora</th><th>Notas</th></tr></thead>
-          <tbody id="tbody-cargo-revisado"></tbody>
-        </table></div>
-      </details>
+      <div class="sec-head"><div class="sec-title">Conversión · % primeras veces → captura ovular por mes</div></div>
+      <div id="tabla-evol-conversion"></div>
+    </div>
+    <div class="section" style="margin-top:20px;">
+      <div class="sec-head"><div class="sec-title">Add-ons · vendido (MXN) por mes</div></div>
+      <div id="tabla-evol-addons"></div>
     </div>
   </div>
 </div>
@@ -613,7 +597,7 @@ const activeFilters = { conversion: null, addons: null, experiencia: null, plati
 
 function initFilters() {
   // Conversion has its own hardcoded clinic buttons — skip it here
-  ['addons','experiencia','platica','cargos'].forEach(panel => {
+  ['addons','experiencia','platica'].forEach(panel => {
     const bar = document.getElementById(`filter-${panel}`);
     if (!bar) return;
     bar.innerHTML = '';
@@ -655,7 +639,6 @@ function setFilter(panel, value, clickedBtn) {
   if (panel === 'addons') renderAddons();
   if (panel === 'experiencia') renderExperiencia();
   if (panel === 'platica') renderPlatica();
-  if (panel === 'cargos') renderCargos();
 }
 
 function filterByCoord(rows, panel) {
@@ -1359,7 +1342,6 @@ function renderAll() {
   }
   if (state.sheetIT) renderExperiencia();
   if (state.cargos) renderAddons();
-  if (state.citas && state.cargos) renderCargos();
   if (state.citas || state.cargos) renderResumen();
 }
 
@@ -1483,8 +1465,11 @@ function renderConversion() {
 }
 
 // ─── ADD-ONS ──────────────────────────────────────────────────────────────────
-function renderAddons() {
-  const rows = state.cargos;
+// Construye la lista de add-ons (con coordinadora ya asignada) a partir de
+// un set arbitrario de cargos + citas -- función pura, reutilizada por
+// renderAddons() y por la vista de Evolución mensual.
+function computeAddonsList(cargos, citas) {
+  const rows = cargos || [];
   const addons = [];
 
   // Group by patient
@@ -1579,8 +1564,8 @@ function renderAddons() {
   //              cita fue en otro periodo y no aparece en el archivo de citas)
   // 2do intento: buscar en citas por nombre de paciente
   const citasByName = {};
-  if (state.citas) {
-    state.citas.forEach(r => {
+  if (citas) {
+    citas.forEach(r => {
       const n = normName(r['Apellidos, Nombre']||'');
       if (!citasByName[n]) citasByName[n] = [];
       citasByName[n].push(r);
@@ -1611,6 +1596,12 @@ function renderAddons() {
       a.coord = getCoord(citasRows[0], getCiudad(citasRows[0]));
     }
   });
+
+  return addons;
+}
+
+function renderAddons() {
+  const addons = computeAddonsList(state.cargos, state.citas);
 
   // Apply coordinadora filter
   const filteredAddons = activeFilters['addons']
@@ -1662,50 +1653,131 @@ function renderAddons() {
   show('content-addons', true);
 }
 
+// ─── EXPERIENCIA / ADMINISTRATIVO — funciones puras (reutilizadas también
+// por la vista de Evolución mensual) ────────────────────────────────────────
+// Map coordinadora column values to standard names (exact values from IT sheet)
+const COORD_MAP_SHEET = {
+  'viviana sanchez': 'Viviana',
+  'viviana':         'Viviana',
+  'mariana':         'Mariana',
+  'reyna':           'Reyna',
+  'jimena':          'Jimena',
+  'lucía':           'Lucy',
+  'lucia':           'Lucy',
+  'lucy':            'Lucy',
+  'sharon':          'Sharon',
+  'jacqueline':          'Jacqueline',
+  'alondra bautista':'Alondra',
+  'alondra':         'Alondra',
+  'yanelli garcia':  'Yanelli',
+  'yanelli':         'Yanelli',
+  'subrogacion':     'Subrogación',
+  'subrogación':     'Subrogación',
+};
+// Excluded: Externo, Híbrido, Valeria
+
+function getCoordFromSheet(row) {
+  const raw = normProf(row['coordinadora'] || row['Coordinadora'] || '');
+  for (const [key, val] of Object.entries(COORD_MAP_SHEET)) {
+    if (raw.includes(normProf(key))) return val;
+  }
+  return null; // Externo, Híbrido, Valeria = exclude
+}
+
+function isSi(val) {
+  const v = (val||'').toString().toLowerCase().trim();
+  return v === 'sí' || v === 'si' || v === 'yes' || v === '1' || v === 'true';
+}
+
+function isComplete(row) {
+  return isSi(row['demog']) && isSi(row['contacto']) &&
+         isSi(row['CP']) && isSi(row['clasificacion'] || row['clasificación']) &&
+         isSi(row['f_emitida']);
+}
+
+// Solo incluir pacientes que sí asistieron (Estado === 'Terminada' en citas).
+// Si un paciente tiene alguna cita Terminada, se considera que asistió; si
+// todas sus citas están en No Asiste/Reasignada/Anulada, se excluye.
+// Se guarda también el arreglo completo de sus citas (no solo el booleano)
+// para poder revisar su clasificación real (Concepto/Procedencia de
+// subrogación) más abajo.
+function buildCitasIndexByName(citas) {
+  const citasByName = {};
+  const citasRowsByName = {};
+  (citas || []).forEach(r => {
+    const key = normName(r['Apellidos, Nombre'] || '');
+    if (!key) return;
+    if (!(key in citasByName)) citasByName[key] = false;
+    if (r['Estado'] === 'Terminada') citasByName[key] = true;
+    (citasRowsByName[key] = citasRowsByName[key] || []).push(r);
+  });
+  return { citasByName, citasRowsByName };
+}
+function asistio(row, citasByName) {
+  const key = normName(row['paciente'] || '');
+  if (!key || !(key in citasByName)) return true; // sin match en citas, no excluir por precaución
+  return citasByName[key];
+}
+
+// Si la coordinadora escribió "subrogación" en la nota de esa paciente, se
+// toma como corrección manual y manda a la paciente al grupo de
+// Subrogación, sin importar qué diga el sheet de IT o sus citas.
+function notaIndicaSubrogacion(paciente, dia_cita) {
+  const notas = getNotas();
+  const v = notas[notaKey('incompleto', paciente, dia_cita, null)] || '';
+  return /subrogaci/i.test(v);
+}
+
+// Coordinadora real de la paciente para Administrativo: 1) si la nota dice
+// "subrogación", gana esa corrección manual; 2) si alguna de sus citas
+// tiene Concepto/Procedencia de subrogación (misma clasificación que usan
+// Cargos y Add-ons -- ver esSubrogacion()), es Subrogación aunque el sheet
+// de IT tenga puesta otra coordinadora o "Externo"; 3) si no, se usa el
+// valor de la columna "coordinadora" del sheet como antes.
+function resolveCoordExp(row, citasRowsByName) {
+  if (notaIndicaSubrogacion(row['paciente'], row['dia_cita'])) return 'Subrogación';
+  const citasDeElla = citasRowsByName[normName(row['paciente'] || '')] || [];
+  if (citasDeElla.some(cr => esSubrogacion(cr))) return 'Subrogación';
+  return getCoordFromSheet(row);
+}
+
+// Si la coordinadora escribió una nota explicando que el dato SÍ está
+// (ej. "ya tiene CP", "se corrigió, sí tiene clasificación"), el
+// expediente se saca de "incompleto" y cuenta como completo — igual que
+// en la pestaña de Cargos, cualquier nota no vacía se toma como que ya
+// se revisó el caso. EXCEPTO si la nota indica subrogación: ese caso debe
+// seguir contando como incompleto (solo cambia de coordinadora).
+function notaResuelveIncompleto(paciente, dia_cita) {
+  if (notaIndicaSubrogacion(paciente, dia_cita)) return false;
+  const notas = getNotas();
+  const v = notas[notaKey('incompleto', paciente, dia_cita, null)];
+  return !!(v && v.trim());
+}
+
+// Cálculo puro de Administrativo para un set arbitrario de datos (sheetIT +
+// citas) -- lo usan tanto renderExperiencia() como la vista de Evolución
+// mensual, para que ambas SIEMPRE den el mismo número con las mismas reglas.
+function computeExperienciaResult(sheetIT, citas, coordFilter) {
+  const { citasByName, citasRowsByName } = buildCitasIndexByName(citas || []);
+  const audited = (sheetIT || []).filter(r => {
+    const coord = resolveCoordExp(r, citasRowsByName);
+    if (!coord) return false;
+    if (coordFilter && coord !== coordFilter) return false;
+    if (!asistio(r, citasByName)) return false;
+    return true;
+  });
+  const completoBase = audited.filter(r => isComplete(r));
+  const incompletoTodos = audited.filter(r => !isComplete(r));
+  const incompleto = incompletoTodos.filter(r => !notaResuelveIncompleto(r['paciente'], r['dia_cita']));
+  const revisadosPorNota = incompletoTodos.filter(r => notaResuelveIncompleto(r['paciente'], r['dia_cita']));
+  const completo = [...completoBase, ...revisadosPorNota];
+  return { audited, completo, incompleto, revisadosPorNota, citasRowsByName };
+}
+
 function renderExperiencia() {
   if (!state.sheetIT) return;
   const rows = state.sheetIT;
   const coordFilter = activeFilters['experiencia'];
-
-  // Map coordinadora column values to standard names (exact values from IT sheet)
-  const COORD_MAP_SHEET = {
-    'viviana sanchez': 'Viviana',
-    'viviana':         'Viviana',
-    'mariana':         'Mariana',
-    'reyna':           'Reyna',
-    'jimena':          'Jimena',
-    'lucía':           'Lucy',
-    'lucia':           'Lucy',
-    'lucy':            'Lucy',
-    'sharon':          'Sharon',
-    'jacqueline':          'Jacqueline',
-    'alondra bautista':'Alondra',
-    'alondra':         'Alondra',
-    'yanelli garcia':  'Yanelli',
-    'yanelli':         'Yanelli',
-    'subrogacion':     'Subrogación',
-    'subrogación':     'Subrogación',
-  };
-  // Excluded: Externo, Híbrido, Valeria
-
-  function getCoordFromSheet(row) {
-    const raw = normProf(row['coordinadora'] || row['Coordinadora'] || '');
-    for (const [key, val] of Object.entries(COORD_MAP_SHEET)) {
-      if (raw.includes(normProf(key))) return val;
-    }
-    return null; // Externo, Híbrido, Valeria = exclude
-  }
-
-  function isSi(val) {
-    const v = (val||'').toString().toLowerCase().trim();
-    return v === 'sí' || v === 'si' || v === 'yes' || v === '1' || v === 'true';
-  }
-
-  function isComplete(row) {
-    return isSi(row['demog']) && isSi(row['contacto']) &&
-           isSi(row['CP']) && isSi(row['clasificacion'] || row['clasificación']) &&
-           isSi(row['f_emitida']);
-  }
 
   // Cualquier valor que no sea un simple "sí"/"no" (vacío) en estas columnas
   // es, en la práctica, un comentario que dejó la coordinadora (ej. "pendiente,
@@ -1729,75 +1801,9 @@ function renderExperiencia() {
     ].filter(Boolean).join(' · ');
   }
 
-  // Solo incluir pacientes que sí asistieron (Estado === 'Terminada' en citas).
-  // Si un paciente tiene alguna cita Terminada, se considera que asistió; si
-  // todas sus citas están en No Asiste/Reasignada/Anulada, se excluye.
-  // Se guarda también el arreglo completo de sus citas (no solo el booleano)
-  // para poder revisar su clasificación real (Concepto/Procedencia de
-  // subrogación) más abajo.
-  const citasByName = {};
-  const citasRowsByName = {};
-  (state.citas || []).forEach(r => {
-    const key = normName(r['Apellidos, Nombre'] || '');
-    if (!key) return;
-    if (!(key in citasByName)) citasByName[key] = false;
-    if (r['Estado'] === 'Terminada') citasByName[key] = true;
-    (citasRowsByName[key] = citasRowsByName[key] || []).push(r);
-  });
-  function asistio(row) {
-    const key = normName(row['paciente'] || '');
-    if (!key || !(key in citasByName)) return true; // sin match en citas, no excluir por precaución
-    return citasByName[key];
-  }
-
-  // Si la coordinadora escribió "subrogación" en la nota de esa paciente, se
-  // toma como corrección manual y manda a la paciente al grupo de
-  // Subrogación, sin importar qué diga el sheet de IT o sus citas.
-  function notaIndicaSubrogacion(paciente, dia_cita) {
-    const notas = getNotas();
-    const v = notas[notaKey('incompleto', paciente, dia_cita, null)] || '';
-    return /subrogaci/i.test(v);
-  }
-
-  // Coordinadora real de la paciente para Administrativo: 1) si la nota dice
-  // "subrogación", gana esa corrección manual; 2) si alguna de sus citas
-  // tiene Concepto/Procedencia de subrogación (misma clasificación que usan
-  // Cargos y Add-ons -- ver esSubrogacion()), es Subrogación aunque el sheet
-  // de IT tenga puesta otra coordinadora o "Externo"; 3) si no, se usa el
-  // valor de la columna "coordinadora" del sheet como antes.
-  function resolveCoordExp(row) {
-    if (notaIndicaSubrogacion(row['paciente'], row['dia_cita'])) return 'Subrogación';
-    const citasDeElla = citasRowsByName[normName(row['paciente'] || '')] || [];
-    if (citasDeElla.some(cr => esSubrogacion(cr))) return 'Subrogación';
-    return getCoordFromSheet(row);
-  }
-
-  // Filter to audited coordinadoras only, applying coord filter
-  const audited = rows.filter(r => {
-    const coord = resolveCoordExp(r);
-    if (!coord) return false;
-    if (coordFilter && coord !== coordFilter) return false;
-    if (!asistio(r)) return false;
-    return true;
-  });
-
-  // Si la coordinadora escribió una nota explicando que el dato SÍ está
-  // (ej. "ya tiene CP", "se corrigió, sí tiene clasificación"), el
-  // expediente se saca de "incompleto" y cuenta como completo — igual que
-  // en la pestaña de Cargos, cualquier nota no vacía se toma como que ya
-  // se revisó el caso.
-  function notaResuelveIncompleto(paciente, dia_cita) {
-    if (notaIndicaSubrogacion(paciente, dia_cita)) return false;
-    const notas = getNotas();
-    const v = notas[notaKey('incompleto', paciente, dia_cita, null)];
-    return !!(v && v.trim());
-  }
-
-  const completoBase = audited.filter(r => isComplete(r));
-  const incompletoTodos = audited.filter(r => !isComplete(r));
-  const incompleto = incompletoTodos.filter(r => !notaResuelveIncompleto(r['paciente'], r['dia_cita']));
-  const revisadosPorNota = incompletoTodos.filter(r => notaResuelveIncompleto(r['paciente'], r['dia_cita']));
-  const completo = [...completoBase, ...revisadosPorNota];
+  const { audited, completo, incompleto, revisadosPorNota, citasRowsByName } =
+    computeExperienciaResult(state.sheetIT, state.citas, coordFilter);
+  const resolveCoordExpLocal = r => resolveCoordExp(r, citasRowsByName);
   const pct = audited.length > 0 ? Math.round(completo.length / audited.length * 100) : 0;
 
   set('e-total', audited.length);
@@ -1809,7 +1815,7 @@ function renderExperiencia() {
   const byCoord = {};
   COORD_LIST.forEach(c => byCoord[c] = {total:0, completo:0});
   audited.forEach(r => {
-    const coord = resolveCoordExp(r);
+    const coord = resolveCoordExpLocal(r);
     if (!coord || !byCoord[coord]) return;
     byCoord[coord].total++;
     if (isComplete(r) || notaResuelveIncompleto(r['paciente'], r['dia_cita'])) byCoord[coord].completo++;
@@ -1835,7 +1841,7 @@ function renderExperiencia() {
   document.getElementById('tbody-incompleto').innerHTML = incompleto.length === 0
     ? '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:24px;">Todos los expedientes están completos ✔</td></tr>'
     : incompleto.map(r => {
-        const coord = resolveCoordExp(r);
+        const coord = resolveCoordExpLocal(r);
         const sede = (r['sede_cita'] || r['sede'] || r['ciudad'] || '—');
         const badge = v => isSi(v)
           ? `<span class="badge b-green">Sí</span>`
@@ -1863,7 +1869,7 @@ function renderExperiencia() {
     tbodyRevisadosExp.innerHTML = revisadosPorNota.length === 0
       ? '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:16px;">Sin casos revisados por nota</td></tr>'
       : revisadosPorNota.map(r => {
-          const coord = resolveCoordExp(r);
+          const coord = resolveCoordExpLocal(r);
           const badge = v => isSi(v)
             ? `<span class="badge b-green">Sí</span>`
             : `<span class="badge b-red">No</span>`;
@@ -2469,11 +2475,215 @@ function citySplitHTML(gdl, cdmx, label1, label2, met) {
 function set(id, val) { const el=document.getElementById(id); if(el) el.textContent=val; }
 function show(id, visible) { const el=document.getElementById(id); if(el) el.style.display=visible?'block':'none'; }
 
+// ─── EVOLUCIÓN MENSUAL ──────────────────────────────────────────────────────
+// Recalcula, por coordinadora y por MES calendario, los mismos 4 indicadores
+// que ya se ven en las otras pestañas (Plática, Administrativo, Conversión,
+// Add-ons) -- para poder ver la tendencia mes a mes. La fuente de datos es
+// el Historial de snapshots ("Guardar semana" / "Importar .json"): cada fila
+// (cita, cargo o registro del sheet IT) se agrupa por SU PROPIO mes (no por
+// el rango del snapshot), y se deduplica por paciente+fecha+concepto para
+// que una misma cita/cargo que aparezca en más de un snapshot solapado no se
+// cuente dos veces.
+
+// Conversión por coordinadora individual (no por clínica como el filtro de
+// la pestaña Conversión) -- función pura, reutilizada por Evolución mensual.
+function computeConversionResult(citas, coordFilter) {
+  const rows = citas || [];
+  const allPV = rows.filter(r => isPV(r['Concepto']) && r['Estado'] === 'Terminada' && !isExternal(r));
+  const allCap = rows.filter(r => isCaptura(r['Concepto']) && r['Estado'] === 'Terminada' && !isExternal(r) && !isCapturaExcepcion(r['Obs.']));
+  const pvRows = coordFilter ? allPV.filter(r => getCoord(r, getCiudad(r)) === coordFilter) : allPV;
+  const capFiltered = coordFilter ? allCap.filter(r => getCoord(r, getCiudad(r)) === coordFilter) : allCap;
+  const capSeen = new Set();
+  const capRows = capFiltered.filter(r => {
+    const key = normName(r['Apellidos, Nombre']||'');
+    if (!key || capSeen.has(key)) return false;
+    capSeen.add(key);
+    return true;
+  });
+  return { pv: pvRows.length, cap: capRows.length };
+}
+
+function rowKeyDedup(prefix, nombre, fechaCampo, conceptoCampo) {
+  return [prefix, normName(nombre||''), fechaCampo||'', (conceptoCampo||'').toString().toLowerCase().trim()].join('|');
+}
+
+// Junta todos los snapshots del Historial y arma, por mes calendario ('YYYY-MM'),
+// las filas de citas/cargos/sheetIT ya deduplicadas entre snapshots.
+function buildMonthlyDatasets() {
+  const historial = getHistorial();
+  const citasSeen = new Set();
+  const cargosSeen = new Set();
+  const expSeen = new Set();
+  const meses = {};
+  function ensureMes(m) {
+    if (!meses[m]) meses[m] = { citas: [], cargos: [], sheetIT: [] };
+    return meses[m];
+  }
+  historial.forEach(snap => {
+    const s = snap.state || {};
+    const citas = [...(s.citas_gdl||[]), ...(s.citas_cdmx||[]), ...(s.citas_met||[])];
+    citas.forEach(r => {
+      const m = fechaYMD(r['Fecha']);
+      if (!m) return;
+      const key = rowKeyDedup('citas', r['Apellidos, Nombre'], m, r['Concepto']);
+      if (citasSeen.has(key)) return;
+      citasSeen.add(key);
+      ensureMes(m.slice(0,7)).citas.push(r);
+    });
+    (s.cargos||[]).forEach(r => {
+      const m = fechaYMD(r['F. Cargo']);
+      if (!m) return;
+      const key = rowKeyDedup('cargos', r['Historia'], m, r['Nombre Prod.']) + '|' + (r['Tt Venta + IVA']||r['Total Venta']||'');
+      if (cargosSeen.has(key)) return;
+      cargosSeen.add(key);
+      ensureMes(m.slice(0,7)).cargos.push(r);
+    });
+    (s.sheetIT||[]).forEach(r => {
+      const m = fechaYMD(r['dia_cita']);
+      if (!m) return;
+      const key = rowKeyDedup('exp', r['paciente'], m, r['servicio']);
+      if (expSeen.has(key)) return;
+      expSeen.add(key);
+      ensureMes(m.slice(0,7)).sheetIT.push(r);
+    });
+  });
+  return meses;
+}
+
+function platicaPorCoordDeMes(citas) {
+  const plat = computePlatica(citas, null);
+  const byCoord = {};
+  plat.results.forEach(r => {
+    if (!r.coord) return;
+    if (r.status === 'no_contesta' || r.status === 'no_aplica') return;
+    if (!byCoord[r.coord]) byCoord[r.coord] = { num: 0, total: 0 };
+    byCoord[r.coord].total++;
+    if (r.status === 'completa' || r.status === 'en_consulta' || r.status === 'revisada_nota') byCoord[r.coord].num++;
+  });
+  return byCoord;
+}
+
+function administrativoPorCoordDeMes(sheetIT, citas) {
+  const { audited, completo, citasRowsByName } = computeExperienciaResult(sheetIT, citas, null);
+  const completoSet = new Set(completo);
+  const byCoord = {};
+  audited.forEach(r => {
+    const coord = resolveCoordExp(r, citasRowsByName);
+    if (!coord) return;
+    if (!byCoord[coord]) byCoord[coord] = { num: 0, total: 0 };
+    byCoord[coord].total++;
+    if (completoSet.has(r)) byCoord[coord].num++;
+  });
+  return byCoord;
+}
+
+function conversionPorCoordDeMes(citas) {
+  const byCoord = {};
+  COORD_LIST.forEach(c => {
+    const r = computeConversionResult(citas, c);
+    if (r.pv > 0 || r.cap > 0) byCoord[c] = { pv: r.pv, cap: r.cap };
+  });
+  return byCoord;
+}
+
+function addonsPorCoordDeMes(cargos, citas) {
+  const addons = computeAddonsList(cargos, citas);
+  const byCoord = {};
+  addons.forEach(a => {
+    if (!a.coord) return;
+    if (!byCoord[a.coord]) byCoord[a.coord] = { monto: 0, count: 0 };
+    byCoord[a.coord].monto += Number(a.monto) || 0;
+    byCoord[a.coord].count++;
+  });
+  return byCoord;
+}
+
+function computeEvolucionMensual() {
+  const meses = buildMonthlyDatasets();
+  const mesesOrdenados = Object.keys(meses).sort();
+  // Para Administrativo, "asistio"/resolveCoordExp deben poder cruzar contra
+  // CUALQUIER cita del historial (no solo las del mismo mes que el registro
+  // del sheet IT) -- un desfase de un par de días entre el "dia_cita" del
+  // sheet y la fecha real de la cita en Vrepro no debe hacer que la
+  // paciente desaparezca del cruce. El sheetIT sí se mantiene agrupado por
+  // mes (es el eje temporal real del indicador).
+  const citasTodas = mesesOrdenados.reduce((acc, m) => acc.concat(meses[m].citas), []);
+  const data = { platica: {}, administrativo: {}, conversion: {}, addons: {} };
+  mesesOrdenados.forEach(m => {
+    const d = meses[m];
+    data.platica[m] = platicaPorCoordDeMes(d.citas);
+    data.administrativo[m] = administrativoPorCoordDeMes(d.sheetIT, citasTodas);
+    data.conversion[m] = conversionPorCoordDeMes(d.citas);
+    data.addons[m] = addonsPorCoordDeMes(d.cargos, d.citas);
+  });
+  return { meses: mesesOrdenados, data };
+}
+
+const MESES_CORTOS = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+function mesLabel(m) {
+  const [y, mo] = m.split('-');
+  return `${MESES_CORTOS[parseInt(mo,10)-1]} ${y.slice(2)}`;
+}
+
+function celdaPct(v) {
+  if (!v || !v.total) return '<span style="color:var(--muted);">—</span>';
+  const pct = Math.round(v.num / v.total * 100);
+  const cls = pct >= 90 ? 'v-green' : pct >= 70 ? 'v-amber' : 'v-red';
+  return `<strong class="${cls}">${pct}%</strong><br><span style="font-size:10.5px;color:var(--muted);">${v.num}/${v.total}</span>`;
+}
+function celdaConversion(v) {
+  if (!v || !v.pv) return '<span style="color:var(--muted);">—</span>';
+  const pct = Math.round(v.cap / v.pv * 100);
+  const cls = pct >= 30 ? 'v-green' : pct >= 15 ? 'v-amber' : 'v-red';
+  return `<strong class="${cls}">${pct}%</strong><br><span style="font-size:10.5px;color:var(--muted);">${v.cap}/${v.pv}</span>`;
+}
+function celdaAddons(v) {
+  if (!v || !v.count) return '<span style="color:var(--muted);">—</span>';
+  return `<strong>$${Math.round(v.monto).toLocaleString('es-MX')}</strong><br><span style="font-size:10.5px;color:var(--muted);">${v.count} add-ons</span>`;
+}
+
+function renderTablaEvolucion(containerId, meses, dataPorMes, cellFn) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  const coordsSet = new Set();
+  meses.forEach(m => Object.keys(dataPorMes[m]||{}).forEach(c => coordsSet.add(c)));
+  const coords = COORD_LIST.filter(c => coordsSet.has(c));
+  if (meses.length === 0 || coords.length === 0) {
+    el.innerHTML = '<p style="color:var(--muted);font-size:12.5px;padding:12px 0;">Sin snapshots guardados todavía para este indicador.</p>';
+    return;
+  }
+  const head = `<tr><th style="text-align:left;">Coordinadora</th>${meses.map(m=>`<th style="text-align:center;">${mesLabel(m)}</th>`).join('')}</tr>`;
+  const body = coords.map(coord => {
+    const cells = meses.map(m => `<td style="text-align:center;">${cellFn((dataPorMes[m]||{})[coord])}</td>`).join('');
+    return `<tr><td class="td-name">${coord}</td>${cells}</tr>`;
+  }).join('');
+  el.innerHTML = `<div class="tbl-wrap"><table><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
+}
+
+function renderEvolucion() {
+  const { meses, data } = computeEvolucionMensual();
+  renderTablaEvolucion('tabla-evol-platica', meses, data.platica, celdaPct);
+  renderTablaEvolucion('tabla-evol-administrativo', meses, data.administrativo, celdaPct);
+  renderTablaEvolucion('tabla-evol-conversion', meses, data.conversion, celdaConversion);
+  renderTablaEvolucion('tabla-evol-addons', meses, data.addons, celdaAddons);
+
+  const totalSnapshots = getHistorial().length;
+  const info = document.getElementById('evol-info');
+  if (info) {
+    info.textContent = meses.length > 0
+      ? `${meses.length} mes(es) con datos · ${totalSnapshots} snapshot(s) en el historial`
+      : `Sin datos todavía: guarda semanas con "Guardar semana" o impórtalas desde tus respaldos .json (botón "Importar .json" en Historial), y vuelve a esta pestaña.`;
+  }
+  show('loading-evolucion', false);
+  show('content-evolucion', true);
+}
+
 function showTab(id) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.getElementById('tab-'+id).classList.add('active');
   document.getElementById('panel-'+id).classList.add('active');
+  if (id === 'evolucion') renderEvolucion();
 }
 
 // ─── AUTO-LOAD FROM GITHUB ────────────────────────────────────────────────────
@@ -2626,7 +2836,6 @@ async function sincronizarNotasDesdeNube(mostrarAlerta) {
     localStorage.setItem(NOTES_KEY, JSON.stringify(merged));
     if (state.citas && state.citas.length) renderPlatica();
     if (state.sheetIT) renderExperiencia();
-    if (state.citas && state.cargos) renderCargos();
     if (state.cargos) renderAddons();
     if (mostrarAlerta) alert('Notas actualizadas ✔');
   } catch (e) {
@@ -2672,10 +2881,7 @@ try { migrarNotasPlatica(); } catch (e) {}
 
 function notaCambiada(key) {
   const tabla = String(key||'').split('|')[0];
-  if (tabla === 'sincargo') {
-    if (state.citas && state.cargos) renderCargos();
-    return;
-  }
+  if (tabla === 'sincargo') return; // pestaña de Cargos retirada del dashboard
   if (tabla === 'incompleto') {
     if (state.sheetIT) renderExperiencia();
     return;
@@ -2855,7 +3061,6 @@ function renderAll() {
   if (state.citas) { renderConversion(); renderPlatica(); }
   if (state.sheetIT) renderExperiencia();
   if (state.cargos) renderAddons();
-  if (state.citas && state.cargos) renderCargos();
 }
 
 
