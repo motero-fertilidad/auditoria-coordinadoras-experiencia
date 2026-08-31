@@ -2639,13 +2639,26 @@ function computeEvolucionMensual() {
   // paciente desaparezca del cruce. El sheetIT sí se mantiene agrupado por
   // mes (es el eje temporal real del indicador).
   const citasTodas = mesesOrdenados.reduce((acc, m) => acc.concat(meses[m].citas), []);
+  // El mes actual (calendario de hoy) se calcula SIEMPRE con los datos que
+  // están cargados ahora mismo en el dashboard (state.*), en vez de con el
+  // snapshot guardado del historial -- así la columna del mes en curso
+  // queda idéntica a lo que se ve en las demás pestañas (Plática,
+  // Administrativo, Conversión, Add-ons), que tampoco filtran por fecha.
+  // Los meses ya cerrados (anteriores) sí usan el historial, agrupado por
+  // la fecha real de cada fila.
+  const mesActual = new Date().toISOString().slice(0, 7);
   const data = { platica: {}, administrativo: {}, conversion: {}, addons: {} };
   mesesOrdenados.forEach(m => {
     const d = meses[m];
-    data.platica[m] = platicaPorCoordDeMes(d.citas);
-    data.administrativo[m] = administrativoPorCoordDeMes(d.sheetIT, citasTodas);
-    data.conversion[m] = conversionPorClinicaDeMes(d.citas);
-    data.addons[m] = addonsPorCoordDeMes(d.cargos, d.citas);
+    const esMesActual = (m === mesActual) && state && state.citas && state.citas.length > 0;
+    const citasMes = esMesActual ? state.citas : d.citas;
+    const sheetITMes = esMesActual ? state.sheetIT : d.sheetIT;
+    const cargosMes = esMesActual ? state.cargos : d.cargos;
+    const citasParaAdmin = esMesActual ? state.citas : citasTodas;
+    data.platica[m] = platicaPorCoordDeMes(citasMes);
+    data.administrativo[m] = administrativoPorCoordDeMes(sheetITMes, citasParaAdmin);
+    data.conversion[m] = conversionPorClinicaDeMes(citasMes);
+    data.addons[m] = addonsPorCoordDeMes(cargosMes, citasMes);
   });
   return { meses: mesesOrdenados, data };
 }
@@ -2826,10 +2839,14 @@ async function autoLoadFromGitHub() {
 // Carga automáticamente, desde la carpeta historial/ del repo, los
 // snapshots mensuales "oficiales" (los que se suben ahí a propósito para que
 // Evolución mensual tenga datos sin que cada quien tenga que usar el botón
-// "Importar .json" a mano en su propio navegador). Es ADITIVO: si ya existe
-// un snapshot con el mismo label en el Historial de este navegador (porque
-// la usuaria lo guardó/importó ella misma), NO se pisa -- solo se agregan
-// los que falten.
+// "Importar .json" a mano en su propio navegador). El repo es la fuente de
+// verdad: si ya existe un snapshot con el mismo label en el Historial de
+// este navegador (por ejemplo porque la usuaria lo guardó/importó ella
+// misma antes de que existiera este archivo en el repo, con datos
+// desactualizados), se REEMPLAZA por la versión del repo siempre que esta
+// sea igual o más reciente (fecha_guardado). Así el dashboard se autocorrige
+// solo con solo recargar la página, sin que nadie tenga que limpiar su
+// navegador a mano.
 async function autoLoadHistorialFromGitHub() {
   try {
     const res = await fetch('historial/manifest.json?' + Date.now(), {cache:'no-cache'});
@@ -2837,7 +2854,7 @@ async function autoLoadHistorialFromGitHub() {
     const files = await res.json();
     if (!Array.isArray(files) || files.length === 0) return;
     const historial = getHistorial();
-    const labelsExistentes = new Set(historial.map(h => h.label));
+    const indexPorLabel = new Map(historial.map((h, i) => [h.label, i]));
     let cambio = false;
     for (const fname of files) {
       try {
@@ -2845,10 +2862,20 @@ async function autoLoadHistorialFromGitHub() {
         if (!r2.ok) continue;
         const snap = await r2.json();
         if (!snap || !snap.label || !snap.state) continue;
-        if (labelsExistentes.has(snap.label)) continue;
-        historial.push(snap);
-        labelsExistentes.add(snap.label);
-        cambio = true;
+        if (indexPorLabel.has(snap.label)) {
+          const idx = indexPorLabel.get(snap.label);
+          const existente = historial[idx];
+          const fechaExistente = new Date(existente.fecha_guardado || 0).getTime();
+          const fechaRepo = new Date(snap.fecha_guardado || 0).getTime();
+          if (fechaRepo >= fechaExistente && JSON.stringify(existente) !== JSON.stringify(snap)) {
+            historial[idx] = snap;
+            cambio = true;
+          }
+        } else {
+          historial.push(snap);
+          indexPorLabel.set(snap.label, historial.length - 1);
+          cambio = true;
+        }
       } catch (e) {
         console.warn('No se pudo cargar historial/' + fname + ':', e.message);
       }
