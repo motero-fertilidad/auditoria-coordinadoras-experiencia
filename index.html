@@ -453,7 +453,7 @@
       <div id="tabla-evol-administrativo"></div>
     </div>
     <div class="section" style="margin-top:20px;">
-      <div class="sec-head"><div class="sec-title">Conversión · % primeras veces → captura ovular por mes</div></div>
+      <div class="sec-head"><div class="sec-title">Conversión por clínica · % primeras veces → captura ovular por mes</div></div>
       <div id="tabla-evol-conversion"></div>
     </div>
     <div class="section" style="margin-top:20px;">
@@ -2510,7 +2510,12 @@ function rowKeyDedup(prefix, nombre, fechaCampo, conceptoCampo) {
 // Junta todos los snapshots del Historial y arma, por mes calendario ('YYYY-MM'),
 // las filas de citas/cargos/sheetIT ya deduplicadas entre snapshots.
 function buildMonthlyDatasets() {
-  const historial = getHistorial();
+  // Si dos snapshots se solapan en fechas (ej. guardaste "01-jun al 28-ago"
+  // y luego, aparte, "01-jul al 31-jul"), el más RECIENTEMENTE GUARDADO gana
+  // el cruce por fila -- así, si vuelves a guardar un periodo con datos más
+  // completos/actualizados, esos son los que se usan.
+  const historial = getHistorial().slice().sort((a, b) =>
+    new Date(b.fecha_guardado || 0) - new Date(a.fecha_guardado || 0));
   const citasSeen = new Set();
   const cargosSeen = new Set();
   const expSeen = new Set();
@@ -2586,6 +2591,29 @@ function conversionPorCoordDeMes(citas) {
   return byCoord;
 }
 
+// Solo las sedes físicas (GDL/CDMX/MTP) -- se excluyen Subrogación y MEFIS,
+// que no son una "clínica" con embudo de conversión propio.
+const CLINICAS_FISICAS = CLINIC_GROUPS.filter(g => ['GDL','CDMX','MTP'].includes(g.label));
+function conversionPorClinicaDeMes(citas) {
+  const rows = citas || [];
+  const allPV = rows.filter(r => isPV(r['Concepto']) && r['Estado'] === 'Terminada' && !isExternal(r));
+  const allCap = rows.filter(r => isCaptura(r['Concepto']) && r['Estado'] === 'Terminada' && !isExternal(r) && !isCapturaExcepcion(r['Obs.']));
+  const byClinica = {};
+  CLINICAS_FISICAS.forEach(group => {
+    const groupCoords = new Set(group.coords);
+    const gPV = allPV.filter(r => groupCoords.has(getCoord(r, getCiudad(r))));
+    const capSeen = new Set();
+    const gCap = allCap.filter(r => groupCoords.has(getCoord(r, getCiudad(r)))).filter(r => {
+      const key = normName(r['Apellidos, Nombre']||'');
+      if (!key || capSeen.has(key)) return false;
+      capSeen.add(key);
+      return true;
+    });
+    if (gPV.length > 0 || gCap.length > 0) byClinica[group.label] = { pv: gPV.length, cap: gCap.length };
+  });
+  return byClinica;
+}
+
 function addonsPorCoordDeMes(cargos, citas) {
   const addons = computeAddonsList(cargos, citas);
   const byCoord = {};
@@ -2598,9 +2626,12 @@ function addonsPorCoordDeMes(cargos, citas) {
   return byCoord;
 }
 
+// Primer mes que se muestra en Evolución mensual -- los periodos anteriores
+// (datos parciales de antes de que existiera esta vista) se ocultan.
+const EVOL_MES_INICIO = '2026-06';
 function computeEvolucionMensual() {
   const meses = buildMonthlyDatasets();
-  const mesesOrdenados = Object.keys(meses).sort();
+  const mesesOrdenados = Object.keys(meses).sort().filter(m => m >= EVOL_MES_INICIO);
   // Para Administrativo, "asistio"/resolveCoordExp deben poder cruzar contra
   // CUALQUIER cita del historial (no solo las del mismo mes que el registro
   // del sheet IT) -- un desfase de un par de días entre el "dia_cita" del
@@ -2613,7 +2644,7 @@ function computeEvolucionMensual() {
     const d = meses[m];
     data.platica[m] = platicaPorCoordDeMes(d.citas);
     data.administrativo[m] = administrativoPorCoordDeMes(d.sheetIT, citasTodas);
-    data.conversion[m] = conversionPorCoordDeMes(d.citas);
+    data.conversion[m] = conversionPorClinicaDeMes(d.citas);
     data.addons[m] = addonsPorCoordDeMes(d.cargos, d.citas);
   });
   return { meses: mesesOrdenados, data };
@@ -2625,37 +2656,68 @@ function mesLabel(m) {
   return `${MESES_CORTOS[parseInt(mo,10)-1]} ${y.slice(2)}`;
 }
 
-function celdaPct(v) {
-  if (!v || !v.total) return '<span style="color:var(--muted);">—</span>';
-  const pct = Math.round(v.num / v.total * 100);
-  const cls = pct >= 90 ? 'v-green' : pct >= 70 ? 'v-amber' : 'v-red';
-  return `<strong class="${cls}">${pct}%</strong><br><span style="font-size:10.5px;color:var(--muted);">${v.num}/${v.total}</span>`;
+// Indicador de variación vs. el mes anterior mostrado en la tabla (no
+// necesariamente el mes calendario inmediato, si hay un hueco sin datos).
+// "puntos" compara directamente dos porcentajes (ej. 82% -> 94% = ↑12 puntos,
+// que es como se leen los % de cumplimiento); "relativo" compara montos
+// como cambio porcentual (ej. $10,000 -> $11,500 = ↑15%).
+function deltaPuntos(curPct, prevPct) {
+  if (prevPct === null || prevPct === undefined) return '';
+  const diff = Math.round(curPct - prevPct);
+  if (diff === 0) return ` <span style="font-size:10px;color:var(--muted);">＝</span>`;
+  const arrow = diff > 0 ? '↑' : '↓';
+  const color = diff > 0 ? 'var(--green-mid)' : 'var(--red)';
+  return ` <span style="font-size:10.5px;font-weight:700;color:${color};">${arrow}${Math.abs(diff)}%</span>`;
 }
-function celdaConversion(v) {
-  if (!v || !v.pv) return '<span style="color:var(--muted);">—</span>';
-  const pct = Math.round(v.cap / v.pv * 100);
-  const cls = pct >= 30 ? 'v-green' : pct >= 15 ? 'v-amber' : 'v-red';
-  return `<strong class="${cls}">${pct}%</strong><br><span style="font-size:10.5px;color:var(--muted);">${v.cap}/${v.pv}</span>`;
-}
-function celdaAddons(v) {
-  if (!v || !v.count) return '<span style="color:var(--muted);">—</span>';
-  return `<strong>$${Math.round(v.monto).toLocaleString('es-MX')}</strong><br><span style="font-size:10.5px;color:var(--muted);">${v.count} add-ons</span>`;
+function deltaRelativo(curVal, prevVal) {
+  if (!prevVal) return '';
+  const diff = Math.round((curVal - prevVal) / prevVal * 100);
+  if (diff === 0) return ` <span style="font-size:10px;color:var(--muted);">＝</span>`;
+  const arrow = diff > 0 ? '↑' : '↓';
+  const color = diff > 0 ? 'var(--green-mid)' : 'var(--red)';
+  return ` <span style="font-size:10.5px;font-weight:700;color:${color};">${arrow}${Math.abs(diff)}%</span>`;
 }
 
-function renderTablaEvolucion(containerId, meses, dataPorMes, cellFn) {
+function celdaPct(v, prev) {
+  if (!v || !v.total) return '<span style="color:var(--muted);">—</span>';
+  const pct = Math.round(v.num / v.total * 100);
+  const prevPct = (prev && prev.total) ? Math.round(prev.num / prev.total * 100) : null;
+  const cls = pct >= 90 ? 'v-green' : pct >= 70 ? 'v-amber' : 'v-red';
+  return `<strong class="${cls}">${pct}%</strong>${deltaPuntos(pct, prevPct)}<br><span style="font-size:10.5px;color:var(--muted);">${v.num}/${v.total}</span>`;
+}
+function celdaConversion(v, prev) {
+  if (!v || !v.pv) return '<span style="color:var(--muted);">—</span>';
+  const pct = Math.round(v.cap / v.pv * 100);
+  const prevPct = (prev && prev.pv) ? Math.round(prev.cap / prev.pv * 100) : null;
+  const cls = pct >= 30 ? 'v-green' : pct >= 15 ? 'v-amber' : 'v-red';
+  return `<strong class="${cls}">${pct}%</strong>${deltaPuntos(pct, prevPct)}<br><span style="font-size:10.5px;color:var(--muted);">${v.cap}/${v.pv}</span>`;
+}
+function celdaAddons(v, prev) {
+  if (!v || !v.count) return '<span style="color:var(--muted);">—</span>';
+  const prevMonto = prev ? prev.monto : null;
+  return `<strong>$${Math.round(v.monto).toLocaleString('es-MX')}</strong>${deltaRelativo(v.monto, prevMonto)}<br><span style="font-size:10.5px;color:var(--muted);">${v.count} add-ons</span>`;
+}
+
+function renderTablaEvolucion(containerId, meses, dataPorMes, cellFn, rowOrder, rowHeaderLabel) {
   const el = document.getElementById(containerId);
   if (!el) return;
-  const coordsSet = new Set();
-  meses.forEach(m => Object.keys(dataPorMes[m]||{}).forEach(c => coordsSet.add(c)));
-  const coords = COORD_LIST.filter(c => coordsSet.has(c));
-  if (meses.length === 0 || coords.length === 0) {
+  const orderList = rowOrder || COORD_LIST;
+  const rowsSet = new Set();
+  meses.forEach(m => Object.keys(dataPorMes[m]||{}).forEach(c => rowsSet.add(c)));
+  const rows = orderList.filter(c => rowsSet.has(c));
+  if (meses.length === 0 || rows.length === 0) {
     el.innerHTML = '<p style="color:var(--muted);font-size:12.5px;padding:12px 0;">Sin snapshots guardados todavía para este indicador.</p>';
     return;
   }
-  const head = `<tr><th style="text-align:left;">Coordinadora</th>${meses.map(m=>`<th style="text-align:center;">${mesLabel(m)}</th>`).join('')}</tr>`;
-  const body = coords.map(coord => {
-    const cells = meses.map(m => `<td style="text-align:center;">${cellFn((dataPorMes[m]||{})[coord])}</td>`).join('');
-    return `<tr><td class="td-name">${coord}</td>${cells}</tr>`;
+  const head = `<tr><th style="text-align:left;">${rowHeaderLabel || 'Coordinadora'}</th>${meses.map(m=>`<th style="text-align:center;">${mesLabel(m)}</th>`).join('')}</tr>`;
+  const body = rows.map(row => {
+    const cells = meses.map((m, i) => {
+      const cur = (dataPorMes[m]||{})[row];
+      const prevMes = i > 0 ? meses[i-1] : null;
+      const prev = prevMes ? (dataPorMes[prevMes]||{})[row] : null;
+      return `<td style="text-align:center;">${cellFn(cur, prev)}</td>`;
+    }).join('');
+    return `<tr><td class="td-name">${row}</td>${cells}</tr>`;
   }).join('');
   el.innerHTML = `<div class="tbl-wrap"><table><thead>${head}</thead><tbody>${body}</tbody></table></div>`;
 }
@@ -2664,7 +2726,7 @@ function renderEvolucion() {
   const { meses, data } = computeEvolucionMensual();
   renderTablaEvolucion('tabla-evol-platica', meses, data.platica, celdaPct);
   renderTablaEvolucion('tabla-evol-administrativo', meses, data.administrativo, celdaPct);
-  renderTablaEvolucion('tabla-evol-conversion', meses, data.conversion, celdaConversion);
+  renderTablaEvolucion('tabla-evol-conversion', meses, data.conversion, celdaConversion, CLINICAS_FISICAS.map(g => g.label), 'Clínica');
   renderTablaEvolucion('tabla-evol-addons', meses, data.addons, celdaAddons);
 
   const totalSnapshots = getHistorial().length;
@@ -2761,9 +2823,57 @@ async function autoLoadFromGitHub() {
   }
 }
 
+// Carga automáticamente, desde la carpeta historial/ del repo, los
+// snapshots mensuales "oficiales" (los que se suben ahí a propósito para que
+// Evolución mensual tenga datos sin que cada quien tenga que usar el botón
+// "Importar .json" a mano en su propio navegador). Es ADITIVO: si ya existe
+// un snapshot con el mismo label en el Historial de este navegador (porque
+// la usuaria lo guardó/importó ella misma), NO se pisa -- solo se agregan
+// los que falten.
+async function autoLoadHistorialFromGitHub() {
+  try {
+    const res = await fetch('historial/manifest.json?' + Date.now(), {cache:'no-cache'});
+    if (!res.ok) return;
+    const files = await res.json();
+    if (!Array.isArray(files) || files.length === 0) return;
+    const historial = getHistorial();
+    const labelsExistentes = new Set(historial.map(h => h.label));
+    let cambio = false;
+    for (const fname of files) {
+      try {
+        const r2 = await fetch('historial/' + fname + '?' + Date.now(), {cache:'no-cache'});
+        if (!r2.ok) continue;
+        const snap = await r2.json();
+        if (!snap || !snap.label || !snap.state) continue;
+        if (labelsExistentes.has(snap.label)) continue;
+        historial.push(snap);
+        labelsExistentes.add(snap.label);
+        cambio = true;
+      } catch (e) {
+        console.warn('No se pudo cargar historial/' + fname + ':', e.message);
+      }
+    }
+    if (cambio) {
+      try {
+        localStorage.setItem(HIST_KEY, JSON.stringify(historial));
+      } catch (e) {
+        console.warn('No se pudo guardar el historial cargado del repo (almacenamiento local lleno):', e.message);
+        return;
+      }
+      renderHistorialPanel();
+      if (document.getElementById('panel-evolucion') && document.getElementById('panel-evolucion').classList.contains('active')) {
+        renderEvolucion();
+      }
+    }
+  } catch (e) {
+    console.warn('No se pudo cargar el historial del repo:', e.message);
+  }
+}
+
 window.addEventListener('load', () => {
   initFilters();
   autoLoadFromGitHub().then(() => sincronizarNotasDesdeNube(false));
+  autoLoadHistorialFromGitHub();
 });
 
 // ─── HISTORIAL ────────────────────────────────────────────────────────────────
