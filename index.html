@@ -1563,7 +1563,12 @@ function computeAddonsList(cargos, citas) {
     } else if (combined.includes('concierge')) {
       push({fecha,paciente:name,ciudad:c,addon:'Servicio Concierge',cat:'Concierge partos',monto,coord:null});
     } else if (concepto === 'farmacia' || nomProd) {
-      const supleKW = ['myo d-chiro','myo d chiro','holiherb','suplemento one','forcell men','forcell fem','forcell duo'];
+      const supleKW = ['myo d-chiro','myo d chiro','holiherb','suplemento one','forcell men','forcell fem','forcell duo',
+        'regenesis max','nocele',
+        // Nota: "ogestan andractiv" (no solo "ogestan") a propósito -- "ogestan"
+        // a secas también aparece dentro de "UTROGESTAN" (progesterona, un
+        // medicamento de rutina, no un add-on) y lo hubiera contado por error.
+        'ogestan andractiv'];
       if (supleKW.some(k=>combined.includes(k))) {
         push({fecha,paciente:name,ciudad:c,addon:r['Nombre Prod.']||r['Concepto'],cat:'Suplementos',monto,coord:null});
       }
