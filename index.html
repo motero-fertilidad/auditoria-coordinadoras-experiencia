@@ -924,7 +924,13 @@ const GINE_CONCEPTS = ['check up ginecologico', 'check up ginecológico', 'check
 const PLATICA_CONCEPTS = ['plática de resultados', 'platica de resultados'];
 const ADDON_HAM = ['antimulleriana amh', 'antimülleriana amh', 'hormona antimülleriana'];
 const ADDON_PAP = ['papanicolaou'];
-const ADDON_DONACION = ['óvulos fi', 'ovulos fi', 'esperma fi'];
+const ADDON_DONACION = [
+  'óvulos fi', 'ovulos fi', 'esperma fi',
+  // Donante europeo (óvulo/esperma de banco) y donación de esperma LAFER --
+  // "esperma fi"/"óvulos fi" de arriba ya cubren "Muestra de esperma FI -
+  // Sperm Bank..." como subcadena, pero se listan explícito por claridad.
+  'donante europeo', 'donacion esperma', 'donación esperma', 'muestra de esperma fi',
+];
 const ADDON_VITRI = ['[ex] vitrificación', '[ex] vitrificacion', 'vitrificación de ovocitos'];
 // Cuando el Check up Ginecológico se vendió en combo con Fertilidad, el HAM/AMH
 // ya viene incluido en el precio del combo — no debe contarse como add-on aparte.
