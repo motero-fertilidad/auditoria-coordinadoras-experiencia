@@ -108,6 +108,7 @@
   .td-nota { min-width: 160px; }
   .nota-input { width: 100%; box-sizing: border-box; padding: 5px 8px; font-size: 11.5px; border: 1px solid #e5e7eb; border-radius: 6px; background: #fafafa; font-family: inherit; }
   .nota-input:focus { outline: none; border-color: var(--blue); background: #fff; }
+  .td-nota-cerrada { font-size: 11.5px; color: #57534e; background: #fafaf9; border-radius: 6px; }
   .td-red { color: var(--red); font-weight: 700; }
   .td-green { color: #16a34a; font-weight: 600; }
   .td-amber { color: var(--amber); font-weight: 600; }
@@ -1391,7 +1392,12 @@ function poblarFiltroPeriodo() {
   if (!selAnio || !selMes) return;
 
   const meses = buildMonthlyDatasets();
-  const disponibles = Object.keys(meses).sort();
+  const disponiblesSet = new Set(Object.keys(meses));
+  // El mes en curso siempre debe poder elegirse -- aunque todavía no tenga
+  // ningún snapshot guardado en el historial, sus datos viven en `state`
+  // (lo que se acaba de cargar de datos.xlsx).
+  if (state.citas && state.citas.length > 0) disponiblesSet.add(mesActualStr());
+  const disponibles = Array.from(disponiblesSet).sort();
   if (!disponibles.length) { selAnio.style.display = 'none'; selMes.style.display = 'none'; return; }
 
   const anioActualSel = selAnio.value;
@@ -1415,9 +1421,14 @@ function aplicarFiltroPeriodo() {
   const selAnio = document.getElementById('filtro-anio');
   const selMes = document.getElementById('filtro-mes');
   const mesSeleccionado = selMes ? selMes.value : '';
+  const esMesEnCurso = !!mesSeleccionado && mesSeleccionado === mesActualStr();
 
-  if (!mesSeleccionado) {
-    // "Todos los meses" -- volver a los datos en vivo.
+  if (!mesSeleccionado || esMesEnCurso) {
+    // "Todos los meses" O el mes en curso -- ambos casos muestran los datos
+    // en vivo que se acaban de cargar de datos.xlsx. El mes en curso NO se
+    // busca en el historial: todavía se está actualizando y su "foto" ahí
+    // (si es que existe alguna) puede estar incompleta o desactualizada --
+    // lo correcto es siempre mostrar lo que llevamos hasta hoy.
     if (liveStateBackup) {
       state.citas_gdl = liveStateBackup.citas_gdl;
       state.citas_cdmx = liveStateBackup.citas_cdmx;
@@ -1460,6 +1471,59 @@ function aplicarFiltroPeriodo() {
     badge.style.background = '#fef3c7';
     badge.style.color = '#92400e';
   }
+}
+
+// ─── CIERRE DE MES (bloquear notas y proteger números de meses ya pasados) ───
+// Un mes se considera "cerrado" en cuanto el calendario avanza al mes
+// siguiente (no hace falta ningún botón ni acción manual). El mes en curso
+// sigue abierto y editable hasta que termine.
+function mesActualStr() {
+  return new Date().toISOString().slice(0, 7);
+}
+function esMesCerrado(mesStr) {
+  return !!mesStr && mesStr < mesActualStr();
+}
+
+// Dado un snapshot (el objeto {label, fecha_guardado, state} que se guarda o
+// importa), regresa el conjunto de meses (YYYY-MM) que cubren sus citas.
+function mesesDeSnapshot(snap) {
+  const s = (snap && snap.state) || {};
+  const citas = [...(s.citas_gdl||[]), ...(s.citas_cdmx||[]), ...(s.citas_met||[])];
+  const meses = new Set();
+  citas.forEach(r => {
+    const f = fechaYMD(r['Fecha']);
+    if (f) meses.add(f.slice(0, 7));
+  });
+  return meses;
+}
+
+// Meses que ya quedaron archivados "oficialmente" en el repo de GitHub
+// (historial/*.json, lo que ve todo el que abre el dashboard) y que además
+// ya cerraron -- es decir, el registro que ya nadie debería pisar por error.
+function mesesCerradosEnRepo() {
+  const cerrados = new Set();
+  (historialRepo || []).forEach(snap => {
+    mesesDeSnapshot(snap).forEach(m => { if (esMesCerrado(m)) cerrados.add(m); });
+  });
+  return cerrados;
+}
+
+// Se llama antes de guardar/importar/borrar un snapshot local. Si toca un mes
+// que ya está cerrado y archivado en el repo, avisa con el detalle antes de
+// dejar continuar -- no es un candado absoluto (a veces hace falta corregir
+// un mes cerrado, como ya pasó antes con pláticas que faltaban), pero evita
+// que alguien lo pise sin darse cuenta.
+function advertirSiMesCerrado(snap, accion) {
+  const cerradosRepo = mesesCerradosEnRepo();
+  const mesesDelSnap = mesesDeSnapshot(snap);
+  const conflicto = Array.from(mesesDelSnap).filter(m => cerradosRepo.has(m));
+  if (!conflicto.length) return true;
+  const nombres = conflicto.map(mesLabelLargo).join(', ');
+  return confirm(
+    `⚠️ ${nombres} ya está cerrado y archivado en el historial oficial del repo.\n\n` +
+    `${accion} puede afectar esos números en este navegador.\n\n` +
+    `¿Seguro que quieres continuar?`
+  );
 }
 
 // ─── AUTO-LOAD FROM GITHUB (Auditoria Experiencia.xlsx) ──────────────────────
@@ -3242,11 +3306,26 @@ async function sincronizarNotasDesdeNube(mostrarAlerta) {
 function escAttr(s) {
   return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/"/g,'&quot;');
 }
+// Escapa para meter texto libre entre etiquetas (no en un atributo).
+function escHtml(s) {
+  return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
 
 function notaCellHTML(tabla, paciente, fecha, concepto) {
   const key = notaKey(tabla, paciente, fecha, concepto);
   const notas = getNotas();
-  const val = escAttr(notas[key] || '');
+  const texto = notas[key] || '';
+
+  // Si el registro pertenece a un mes que ya cerró (dejó de ser el mes en
+  // curso), la nota queda congelada: se ve, pero ya nadie puede editarla
+  // desde ninguna pestaña del dashboard.
+  const mes = mesDeCargo(fechaYMD(fecha));
+  if (mes && esMesCerrado(mes)) {
+    return `<td class="td-nota td-nota-cerrada" title="Mes cerrado (${mesLabelLargo(mes)}) — ya no se puede editar">` +
+      `${texto ? escHtml(texto) : '<span style="color:#bbb;">—</span>'} <span style="opacity:.6;">🔒</span></td>`;
+  }
+
+  const val = escAttr(texto);
   return `<td class="td-nota"><input type="text" class="nota-input" placeholder="Agregar nota…" value="${val}" data-notakey="${escAttr(key)}" onchange="guardarNota(this.dataset.notakey, this.value); notaCambiada(this.dataset.notakey)"></td>`;
 }
 
@@ -3307,6 +3386,8 @@ function guardarSemana() {
     }
   };
 
+  if (!advertirSiMesCerrado(snapshot, 'Guardar esta semana')) return;
+
   // Guardar en localStorage
   const historial = getHistorial();
   const existe = historial.findIndex(h => h.label === label);
@@ -3360,6 +3441,7 @@ function cargarSnapshot(idx) {
 function borrarSnapshot(idx) {
   const historial = getHistorial();
   const snap = historial[idx];
+  if (!advertirSiMesCerrado(snap, 'Borrar este snapshot')) return;
   if (!confirm(`¿Borrar snapshot "${snap.label}"?`)) return;
   historial.splice(idx, 1);
   localStorage.setItem(HIST_KEY, JSON.stringify(historial));
@@ -3390,6 +3472,8 @@ function importarSnapshot(input) {
       input.value = '';
       return;
     }
+
+    if (!advertirSiMesCerrado(snap, 'Importar este snapshot')) { input.value = ''; return; }
 
     const historial = getHistorial();
     const existe = historial.findIndex(h => h.label === snap.label);
@@ -3437,11 +3521,14 @@ function renderHistorialPanel() {
     lista.innerHTML = repoHtml + '<p style="color:#888;font-size:13px;text-align:center;margin-top:20px;">No hay semanas guardadas a mano en este navegador.<br>Carga datos y presiona 💾 Guardar semana.</p>';
     return;
   }
+  const cerradosRepo = mesesCerradosEnRepo();
   lista.innerHTML = repoHtml + historial.map((h, i) => {
     const fecha = new Date(h.fecha_guardado).toLocaleDateString('es-MX', {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
     const nCitas = (h.state.citas_gdl||[]).length + (h.state.citas_cdmx||[]).length + (h.state.citas_met||[]).length;
+    const esCerrado = Array.from(mesesDeSnapshot(h)).some(m => cerradosRepo.has(m));
+    const candado = esCerrado ? ' <span title="Mes ya cerrado y archivado en el repo" style="color:#92400e;">🔒</span>' : '';
     return `<div style="border:1px solid #e5e7eb;border-radius:10px;padding:14px;margin-bottom:12px;">
-      <div style="font-weight:700;font-size:14px;margin-bottom:4px;">📅 Semana ${h.label}</div>
+      <div style="font-weight:700;font-size:14px;margin-bottom:4px;">📅 Semana ${h.label}${candado}</div>
       <div style="font-size:11px;color:#888;margin-bottom:10px;">Guardado: ${fecha} · ${nCitas} citas</div>
       <div style="display:flex;gap:8px;">
         <button onclick="cargarSnapshot(${i})" style="flex:1;padding:6px;background:#2563eb;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;">▶ Cargar</button>
