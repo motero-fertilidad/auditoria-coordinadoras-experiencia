@@ -202,6 +202,12 @@
   <div class="nav-right">
     <span class="week-badge" id="week-badge">Cargando...</span>
     <span id="load-status" style="font-size:11px;color:#888;"></span>
+    <select id="filtro-anio" onchange="aplicarFiltroPeriodo()" title="Ver un año guardado en el historial" style="display:none;font-size:12px;font-weight:600;color:var(--text);border:1.5px solid var(--border);border-radius:20px;padding:5px 10px;background:#fff;cursor:pointer;">
+      <option value="">Todos los años</option>
+    </select>
+    <select id="filtro-mes" onchange="aplicarFiltroPeriodo()" title="Ver un mes guardado en el historial en vez de los datos en vivo" style="display:none;font-size:12px;font-weight:600;color:var(--text);border:1.5px solid var(--border);border-radius:20px;padding:5px 10px;background:#fff;cursor:pointer;">
+      <option value="">Todos los meses</option>
+    </select>
     <button class="upload-btn" style="background:#059669;" onclick="guardarSemana()" title="Guardar snapshot de esta semana">💾 Guardar semana</button>
     <button class="upload-btn" style="background:#0891b2;" onclick="sincronizarNotasDesdeNube(true)" title="Traer las notas más recientes que hayan escrito otras coordinadoras">🔄 Actualizar notas</button>
     <button class="upload-btn" style="background:#7c3aed;" onclick="toggleHistorial()" title="Ver semanas guardadas">🕐 Historial</button>
@@ -1354,6 +1360,106 @@ function renderAll() {
   if (state.sheetIT) renderExperiencia();
   if (state.cargos) renderAddons();
   if (state.citas || state.cargos) renderResumen();
+}
+
+// ─── FILTRO GLOBAL DE AÑO/MES (ver un mes del historial en TODAS las pestañas) ─
+// A diferencia de "Cargar snapshot" (que reemplaza el estado en vivo para
+// siempre hasta recargar la página), este filtro es reversible: guarda el
+// estado en vivo una sola vez al cargar datos.xlsx, y "Todos los meses" lo
+// restaura tal cual. Reutiliza buildMonthlyDatasets() -- la misma función
+// que arma Evolución mensual -- para que un mes elegido aquí muestre
+// exactamente los mismos números que esa pestaña, en Resumen/Conversión/
+// Add-ons/Administrativo/Plática.
+const MESES_LARGOS = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+function mesLabelLargo(m) {
+  const [y, mo] = m.split('-');
+  return `${MESES_LARGOS[parseInt(mo,10)-1]} ${y}`;
+}
+
+let liveStateBackup = null;
+function guardarRespaldoEstadoVivo() {
+  liveStateBackup = {
+    citas_gdl: state.citas_gdl, citas_cdmx: state.citas_cdmx, citas_met: state.citas_met,
+    cargos: state.cargos, sheetIT: state.sheetIT, experiencia: state.experiencia, citas: state.citas,
+    weekBadge: document.getElementById('week-badge') ? document.getElementById('week-badge').textContent : '',
+  };
+}
+
+function poblarFiltroPeriodo() {
+  const selAnio = document.getElementById('filtro-anio');
+  const selMes = document.getElementById('filtro-mes');
+  if (!selAnio || !selMes) return;
+
+  const meses = buildMonthlyDatasets();
+  const disponibles = Object.keys(meses).sort();
+  if (!disponibles.length) { selAnio.style.display = 'none'; selMes.style.display = 'none'; return; }
+
+  const anioActualSel = selAnio.value;
+  const mesActualSel = selMes.value;
+
+  const anios = Array.from(new Set(disponibles.map(m => m.slice(0,4)))).sort();
+  selAnio.innerHTML = '<option value="">Todos los años</option>' +
+    anios.map(a => `<option value="${a}">${a}</option>`).join('');
+  selAnio.value = anios.includes(anioActualSel) ? anioActualSel : '';
+
+  const mesesParaMostrar = disponibles.filter(m => !selAnio.value || m.startsWith(selAnio.value));
+  selMes.innerHTML = '<option value="">Todos los meses</option>' +
+    mesesParaMostrar.map(m => `<option value="${m}">${mesLabelLargo(m)}</option>`).join('');
+  selMes.value = mesesParaMostrar.includes(mesActualSel) ? mesActualSel : '';
+
+  selAnio.style.display = '';
+  selMes.style.display = '';
+}
+
+function aplicarFiltroPeriodo() {
+  const selAnio = document.getElementById('filtro-anio');
+  const selMes = document.getElementById('filtro-mes');
+  const mesSeleccionado = selMes ? selMes.value : '';
+
+  if (!mesSeleccionado) {
+    // "Todos los meses" -- volver a los datos en vivo.
+    if (liveStateBackup) {
+      state.citas_gdl = liveStateBackup.citas_gdl;
+      state.citas_cdmx = liveStateBackup.citas_cdmx;
+      state.citas_met = liveStateBackup.citas_met;
+      state.cargos = liveStateBackup.cargos;
+      state.sheetIT = liveStateBackup.sheetIT;
+      state.experiencia = liveStateBackup.experiencia;
+      state.citas = liveStateBackup.citas;
+    }
+    // renderAll() vuelve a llamar updateWeekBadge() con los datos en vivo,
+    // así que el badge queda correcto solo. Después quitamos el estilo
+    // ámbar de "histórico" por si quedó puesto.
+    renderAll();
+    const badge = document.getElementById('week-badge');
+    if (badge) { badge.style.background = ''; badge.style.color = ''; }
+    return;
+  }
+
+  // Si eligió un año sin mes (ej. quiere ver "2026" completo), no hay una
+  // sola foto de todo el año -- se le pide elegir también el mes.
+  const meses = buildMonthlyDatasets();
+  const d = meses[mesSeleccionado];
+  if (!d) return;
+
+  state.citas_gdl = d.citas.filter(r => r.__ciudad__ === 'GDL');
+  state.citas_cdmx = d.citas.filter(r => r.__ciudad__ === 'CDMX');
+  state.citas_met = d.citas.filter(r => r.__ciudad__ === 'MET');
+  state.cargos = d.cargos;
+  state.sheetIT = d.sheetIT;
+  state.experiencia = d.sheetIT;
+  state.citas = d.citas;
+
+  // renderAll() llama internamente a updateWeekBadge(), que sobrescribiría
+  // este texto -- por eso el badge de "Histórico" se pone DESPUÉS de
+  // renderAll(), no antes.
+  renderAll();
+  const badge = document.getElementById('week-badge');
+  if (badge) {
+    badge.textContent = `📅 Histórico: ${mesLabelLargo(mesSeleccionado)}`;
+    badge.style.background = '#fef3c7';
+    badge.style.color = '#92400e';
+  }
 }
 
 // ─── AUTO-LOAD FROM GITHUB (Auditoria Experiencia.xlsx) ──────────────────────
@@ -2974,6 +3080,10 @@ async function autoLoadFromGitHub() {
     renderAll();
     if (state.sheetIT) renderExperiencia();
 
+    // Respaldo del estado "en vivo" (lo que acaba de cargar datos.xlsx), para
+    // poder volver a él cuando el filtro de Año/Mes se ponga en "Todos".
+    guardarRespaldoEstadoVivo();
+
   } catch(err) {
     console.error('Error procesando datos.xlsx:', err.message);
     document.getElementById('week-badge').textContent = 'Sin datos';
@@ -3020,6 +3130,7 @@ async function autoLoadHistorialFromGitHub() {
     if (document.getElementById('panel-evolucion') && document.getElementById('panel-evolucion').classList.contains('active')) {
       renderEvolucion();
     }
+    poblarFiltroPeriodo();
   } catch (e) {
     console.warn('No se pudo cargar el historial del repo:', e.message);
   }
@@ -3234,6 +3345,14 @@ function cargarSnapshot(idx) {
   state.experiencia = state.sheetIT;
   state.citas = [...state.citas_gdl, ...state.citas_cdmx, ...state.citas_met];
   document.getElementById('week-badge').textContent = `Semana ${snap.label}`;
+  // Al cargar un snapshot manual, este pasa a ser el estado "vivo" de la
+  // sesión -- reseteamos el filtro Año/Mes a "Todos" para no mezclarlo con
+  // un respaldo que ya no corresponde a lo que se ve en pantalla.
+  const selAnio = document.getElementById('filtro-anio');
+  const selMes = document.getElementById('filtro-mes');
+  if (selAnio) selAnio.value = '';
+  if (selMes) selMes.value = '';
+  guardarRespaldoEstadoVivo();
   renderAll();
   toggleHistorial();
 }
