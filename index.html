@@ -1710,18 +1710,56 @@ function computeAddonsList(cargos, citas) {
       // PAP ya viene INCLUIDO en Check up Ginecológico — solo es add-on cuando
       // se vende en una consulta de fertilidad, check up de fertilidad o check
       // up de pareja (donde no está incluido de base).
-      const hadFertilityOrPV = patRows.some(pr => {
-        const c2 = (pr['Concepto']||'').toLowerCase();
-        return c2.includes('fertility check up') ||
-               c2.includes('check up fertilidad') ||
-               c2.includes('check up sop') ||
-               c2.includes('check-up sop') ||
-               c2.includes('consulta primera vez') ||
-               c2.includes('consulta de primera vez') ||
-               c2.includes('consulta médica') ||
-               c2.includes('consulta medica');
-      });
-      if (hadFertilityOrPV) {
+      const esConsultaCalificante = c2 =>
+        c2.includes('fertility check up') ||
+        c2.includes('check up fertilidad') ||
+        c2.includes('check up sop') ||
+        c2.includes('check-up sop') ||
+        c2.includes('consulta primera vez') ||
+        c2.includes('consulta de primera vez') ||
+        c2.includes('consulta médica') ||
+        c2.includes('consulta medica');
+      const hadFertilityOrPV = patRows.some(pr => esConsultaCalificante((pr['Concepto']||'').toLowerCase()));
+      // Visitas de "Parejas": Vrepro a veces registra la consulta conjunta de
+      // check up SOLO bajo el historial de una de las dos personas, aunque
+      // ambas se hagan su propio Papanicolaou el mismo día con la misma
+      // doctora (ej. Lizbeth Gonzalez Morales / Maria de la Luz Hernández
+      // Arreguín, 14-sep-2026: el "Check up Fertilidad Parejas" quedó
+      // cargado solo a nombre de Lizbeth).
+      //
+      // OJO: mismo día + misma doctora NO alcanza como criterio -- una
+      // doctora ve a mucha gente el mismo día, y eso generó un falso
+      // positivo real (Bahena García madre/hija, 02-sep-2026, contaminadas
+      // por la consulta de pareja de una paciente Aguilar Palma totalmente
+      // aparte, atendida ese mismo día por la misma doctora). Por eso además
+      // se exige que el Papanicolaou de la OTRA persona tenga un Id/Factura
+      // muy cercano al de esta paciente -- eso solo pasa cuando de verdad se
+      // cobraron una detrás de la otra en el mismo trámite de caja.
+      const idPropio = parseFloat(r['Id']);
+      const facturaPropia = parseFloat(r['Factura']);
+      let hadParejaCompartida = false;
+      if (!hadFertilityOrPV) {
+        hadParejaCompartida = rows.some(pr => {
+          const nombreOtra = normName(pr['Historia']||'');
+          if (nombreOtra === pname) return false;
+          const combinedOtra = ((pr['Concepto']||'')+' '+(pr['Nombre Prod.']||'')).toLowerCase();
+          if (!ADDON_PAP.some(k => combinedOtra.includes(k))) return false; // debe ser TAMBIÉN un Papanicolaou
+          if (fmtDate(pr['F. Cargo']) !== fecha) return false;
+          const idOtra = parseFloat(pr['Id']);
+          const facturaOtra = parseFloat(pr['Factura']);
+          const idCercano = !isNaN(idPropio) && !isNaN(idOtra) && Math.abs(idOtra - idPropio) <= 3;
+          const facturaCercana = !isNaN(facturaPropia) && !isNaN(facturaOtra) && Math.abs(facturaOtra - facturaPropia) <= 3;
+          if (!idCercano && !facturaCercana) return false;
+          // La OTRA persona (la del PAP vecino) sí debe tener su propia
+          // consulta de pareja calificante en algún lado de sus cargos.
+          const otraPatRows = byPatient[nombreOtra] || [];
+          return otraPatRows.some(pr2 => {
+            const c2 = ((pr2['Concepto']||'')+' '+(pr2['Nombre Prod.']||'')).toLowerCase();
+            return c2.includes('pareja') && esConsultaCalificante(c2);
+          });
+        });
+      }
+      if (hadFertilityOrPV || hadParejaCompartida) {
         push({fecha,paciente:name,ciudad:c,addon:'Papanicolaou en Consulta de Fertilidad',cat:'PAP en Fertilidad',monto,coord:null});
       }
     } else if (concepto.includes('almacenamiento')) {
