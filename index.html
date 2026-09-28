@@ -513,6 +513,19 @@ const REASIGNACIONES_GDL = [
       'ruby medina':          'Mariana',
     },
   },
+  // Mariana salió -- sus pacientes pasan a Viviana a partir del 21 de
+  // septiembre de 2026. Lo anterior (01-ago al 20-sep) se queda como
+  // Mariana, para no alterar el histórico ni los snapshots ya guardados.
+  {
+    desde: '2026-09-21',
+    doctores: {
+      'diana duran':          'Viviana',
+      'blanca cardenas':      'Viviana',
+      'norma sharey vazquez': 'Viviana',
+      'emanuel':              'Viviana',
+      'ruby medina':          'Viviana',
+    },
+  },
 ];
 // Devuelve el mapa doctor→coordinadora de GDL vigente en una fecha dada.
 // Sin fecha (o fecha ilegible) se usa el mapa base, el histórico.
@@ -544,6 +557,32 @@ const DOCTOR_COORD_CDMX = {
   'mónica olavarria':             'Lucy',
   'eugenia moran orozco':         'Sharon',
   'eugenia morán orozco':         'Sharon',
+};
+// ── Reasignación de cartera en CDMX a partir del 9 de septiembre de 2026 ────
+// Lucy salió: sus pacientes de Jairo pasan a Jimena y sus pacientes de Monica
+// pasan a Reyna. Igual que en GDL, el cambio aplica SOLO a citas/cargos con
+// fecha del 9 de septiembre de 2026 en adelante -- lo anterior sigue
+// contando para Lucy en el histórico.
+const REASIGNACIONES_CDMX = [
+  {
+    desde: '2026-09-09',
+    doctores: {
+      'jairo hernando pedraza pinto': 'Jimena',
+      'monica olavarria':             'Reyna',
+      'mónica olavarria':             'Reyna',
+    },
+  },
+];
+// Devuelve el mapa doctor→coordinadora de CDMX vigente en una fecha dada.
+// Sin fecha (o fecha ilegible) se usa el mapa base, el histórico.
+function mapaCDMX(fecha) {
+  const f = fmtDate(fecha);
+  if (!f || f === '—') return DOCTOR_COORD_CDMX;
+  let mapa = DOCTOR_COORD_CDMX;
+  for (const r of REASIGNACIONES_CDMX) {
+    if (f >= r.desde) mapa = { ...mapa, ...r.doctores };
+  }
+  return mapa;
 };
 // METEPEC
 const DOCTOR_COORD_MET = {
@@ -718,7 +757,7 @@ function coordFromUsuarioAlta(raw) {
 function coordFromProfAnyCity(profRaw, fecha) {
   const prof = normProf(profRaw || '');
   if (!prof) return null;
-  const allDoctors = {...mapaGDL(fecha), ...DOCTOR_COORD_CDMX, ...DOCTOR_COORD_MET};
+  const allDoctors = {...mapaGDL(fecha), ...mapaCDMX(fecha), ...DOCTOR_COORD_MET};
   for (const [doctor, coord] of Object.entries(allDoctors)) {
     if (prof.includes(normProf(doctor))) return coord;
   }
@@ -756,7 +795,7 @@ function getCoord(row, cityOverride) {
   const city = cityOverride || getCiudad(row);
   const fecha = fechaDeFila(row);
   const map = city === 'GDL' ? mapaGDL(fecha)
-             : city === 'CDMX' ? DOCTOR_COORD_CDMX
+             : city === 'CDMX' ? mapaCDMX(fecha)
              : city === 'MET' ? DOCTOR_COORD_MET
              : {};
 
@@ -775,7 +814,7 @@ function getCoord(row, cityOverride) {
   const usuario = normProf(row['Usuario Crea'] || '');
   let coordFromUsuarioDoctor = null;
   if (usuario) {
-    const allDoctors = {...mapaGDL(fecha), ...DOCTOR_COORD_CDMX, ...DOCTOR_COORD_MET};
+    const allDoctors = {...mapaGDL(fecha), ...mapaCDMX(fecha), ...DOCTOR_COORD_MET};
     for (const [doctor, coord] of Object.entries(allDoctors)) {
       if (usuario.includes(normProf(doctor))) { coordFromUsuarioDoctor = coord; break; }
     }
@@ -822,7 +861,7 @@ function getCoordByHistoria(row, cityOverride) {
   const city = cityOverride || getCiudad(row);
   const fecha = fechaDeFila(row);
   const map = city === 'GDL' ? mapaGDL(fecha)
-             : city === 'CDMX' ? DOCTOR_COORD_CDMX
+             : city === 'CDMX' ? mapaCDMX(fecha)
              : city === 'MET' ? DOCTOR_COORD_MET
              : {};
   for (const [doctor, coord] of Object.entries(map)) {
