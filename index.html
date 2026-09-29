@@ -721,6 +721,11 @@ function normProf(p) {
 const USUARIO_ALTA_MAP = {
   'viviana gabriela sanchez vazquez': 'Viviana',
   'karina paola montes vazquez':      'Reyna',
+  // Reyna Romero es la propia coordinadora Reyna dando de alta el cargo ella
+  // misma -- sin esto, un cargo suyo cuyo doctor tratante ya no es de ella
+  // (ej. Jairo, reasignado a Jimena desde el 9-sep) se le va por error al
+  // doctor en vez de a ella (caso real: Carey, Erin -- Donante Europeo E).
+  'reyna romero':                     'Reyna',
   'jazmin gaitan':                    'Jimena',
   'aranza fuentes':                   'Lucy',
   'judith guadalupe ontiveros diaz':  'Sharon',
@@ -976,6 +981,8 @@ const ADDON_DONACION = [
   // "esperma fi"/"óvulos fi" de arriba ya cubren "Muestra de esperma FI -
   // Sperm Bank..." como subcadena, pero se listan explícito por claridad.
   'donante europeo', 'donacion esperma', 'donación esperma', 'muestra de esperma fi',
+  // Donante fresco (Genevity) -- Sharon vendió 1, sep-2026.
+  'donante fresco', 'genevity',
 ];
 const ADDON_VITRI = ['[ex] vitrificación', '[ex] vitrificacion', 'vitrificación de ovocitos'];
 // Cuando el Check up Ginecológico se vendió en combo con Fertilidad, el HAM/AMH
