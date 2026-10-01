@@ -1432,13 +1432,10 @@ function poblarFiltroPeriodo() {
 
   const meses = buildMonthlyDatasets();
   const disponiblesSet = new Set(Object.keys(meses));
-  // El mes de los datos en vivo siempre debe poder elegirse -- aunque
-  // todavía no tenga ningún snapshot guardado en el historial, sus datos
-  // viven en `state` (lo que se acaba de cargar de datos.xlsx). Ver
-  // mesDeDatosEnVivo(): esto no es necesariamente "hoy" en el calendario
-  // real, sino el mes real de las citas ya cargadas.
-  const mesVivo = mesDeDatosEnVivo();
-  if (mesVivo) disponiblesSet.add(mesVivo);
+  // El mes en curso siempre debe poder elegirse -- aunque todavía no tenga
+  // ningún snapshot guardado en el historial, sus datos viven en `state`
+  // (lo que se acaba de cargar de datos.xlsx).
+  if (state.citas && state.citas.length > 0) disponiblesSet.add(mesActualStr());
   const disponibles = Array.from(disponiblesSet).sort();
   if (!disponibles.length) { selAnio.style.display = 'none'; selMes.style.display = 'none'; return; }
 
@@ -1463,7 +1460,7 @@ function aplicarFiltroPeriodo() {
   const selAnio = document.getElementById('filtro-anio');
   const selMes = document.getElementById('filtro-mes');
   const mesSeleccionado = selMes ? selMes.value : '';
-  const esMesEnCurso = !!mesSeleccionado && mesSeleccionado === mesDeDatosEnVivo();
+  const esMesEnCurso = !!mesSeleccionado && mesSeleccionado === mesActualStr();
 
   if (!mesSeleccionado || esMesEnCurso) {
     // "Todos los meses" O el mes en curso -- ambos casos muestran los datos
@@ -2840,33 +2837,47 @@ function buildMonthlyDatasets() {
     if (!meses[m]) meses[m] = { citas: [], cargos: [], sheetIT: [] };
     return meses[m];
   }
+  // El dedup es SOLO entre snapshots distintos que se solapan: dentro de un
+  // mismo snapshot se conservan todas las filas, igual que en las pestañas
+  // en vivo (si no, dos citas legítimas de la misma paciente el mismo día con
+  // el mismo concepto se contaban una sola vez y Conversión no coincidía).
   historial.forEach(snap => {
     const s = snap.state || {};
     const citas = [...(s.citas_gdl||[]), ...(s.citas_cdmx||[]), ...(s.citas_met||[])];
+    const citasNuevas = new Set(), cargosNuevos = new Set(), expNuevos = new Set();
+    // Cada snapshot solo aporta filas de SUS propios meses (los de sus citas):
+    // ej. el sheet de IT del cierre de agosto puede traer ya algunos registros
+    // de los primeros días de septiembre; esos se toman del cierre de
+    // septiembre, no del de agosto, para que el mes cuadre con la pestaña.
+    const mesesPropios = mesesDeSnapshot(snap);
+    const esPropio = m => mesesPropios.size === 0 || mesesPropios.has(m.slice(0,7));
     citas.forEach(r => {
       const m = fechaYMD(r['Fecha']);
       if (!m) return;
       const key = rowKeyDedup('citas', r['Apellidos, Nombre'], m, r['Concepto']);
       if (citasSeen.has(key)) return;
-      citasSeen.add(key);
+      citasNuevas.add(key);
       ensureMes(m.slice(0,7)).citas.push(r);
     });
     (s.cargos||[]).forEach(r => {
       const m = fechaYMD(r['F. Cargo']);
-      if (!m) return;
+      if (!m || !esPropio(m)) return;
       const key = rowKeyDedup('cargos', r['Historia'], m, r['Nombre Prod.']) + '|' + (r['Tt Venta + IVA']||r['Total Venta']||'');
       if (cargosSeen.has(key)) return;
-      cargosSeen.add(key);
+      cargosNuevos.add(key);
       ensureMes(m.slice(0,7)).cargos.push(r);
     });
     (s.sheetIT||[]).forEach(r => {
       const m = fechaYMD(r['dia_cita']);
-      if (!m) return;
+      if (!m || !esPropio(m)) return;
       const key = rowKeyDedup('exp', r['paciente'], m, r['servicio']);
       if (expSeen.has(key)) return;
-      expSeen.add(key);
+      expNuevos.add(key);
       ensureMes(m.slice(0,7)).sheetIT.push(r);
     });
+    citasNuevas.forEach(k => citasSeen.add(k));
+    cargosNuevos.forEach(k => cargosSeen.add(k));
+    expNuevos.forEach(k => expSeen.add(k));
   });
   return meses;
 }
@@ -2940,14 +2951,18 @@ function conversionPorClinicaDeMes(citas) {
   return byClinica;
 }
 
+const SIN_COORD = 'Sin coordinadora asignada';
 function addonsPorCoordDeMes(cargos, citas) {
   const addons = computeAddonsList(cargos, citas);
   const byCoord = {};
+  // Los add-ons sin coordinadora asignada SÍ cuentan en la pestaña Add-ons
+  // ("Todas"), así que aquí también: van en su propia fila para que el Total
+  // de Evolución mensual sea idéntico al "Total vendido" de la pestaña.
   addons.forEach(a => {
-    if (!a.coord) return;
-    if (!byCoord[a.coord]) byCoord[a.coord] = { monto: 0, count: 0 };
-    byCoord[a.coord].monto += Number(a.monto) || 0;
-    byCoord[a.coord].count++;
+    const c = a.coord || SIN_COORD;
+    if (!byCoord[c]) byCoord[c] = { monto: 0, count: 0 };
+    byCoord[c].monto += Number(a.monto) || 0;
+    byCoord[c].count++;
   });
   return byCoord;
 }
@@ -2955,37 +2970,21 @@ function addonsPorCoordDeMes(cargos, citas) {
 // Primer mes que se muestra en Evolución mensual -- los periodos anteriores
 // (datos parciales de antes de que existiera esta vista) se ocultan.
 const EVOL_MES_INICIO = '2026-06';
-// A qué mes calendario pertenecen los datos EN VIVO cargados ahora mismo en
-// `state` (el mes más reciente presente en state.citas) -- OJO: esto NO es
-// necesariamente "hoy" en el calendario real. Ej.: ya es 1 de octubre pero
-// todavía no se sube el datos.xlsx de octubre -- state.citas sigue siendo
-// el de septiembre, así que el mes "en vivo" sigue siendo septiembre. Si en
-// vez de esto se usara el mes real de hoy, en cuanto empezara octubre
-// Evolución mensual saltaría a leer septiembre del historial archivado (una
-// foto guardada, que puede no coincidir con lo que las pestañas en vivo
-// muestran ahora mismo con datos más completos/corregidos) -- quedando
-// desincronizada de las demás pestañas, que sí siguen leyendo `state` en
-// vivo sin importar la fecha.
-function mesDeDatosEnVivo() {
-  if (!state || !state.citas || !state.citas.length) return null;
-  let max = null;
-  state.citas.forEach(r => {
-    const f = fechaYMD(fechaDeFila(r));
-    if (!f) return;
-    const m = f.slice(0, 7);
-    if (!max || m > max) max = m;
-  });
-  return max;
-}
 function computeEvolucionMensual() {
   const meses = buildMonthlyDatasets();
-  // El mes de los datos en vivo debe aparecer SIEMPRE, aunque todavía no
-  // tenga ningún snapshot guardado en el historial (ej. recién se cargó el
-  // export y aún no se ha hecho el "Guardar semana" de cierre) -- sus
-  // números salen de `state` en vivo más abajo, no de este objeto `meses`.
-  const mesEnVivo = mesDeDatosEnVivo();
-  if (mesEnVivo && !meses[mesEnVivo]) {
-    meses[mesEnVivo] = { citas: [], cargos: [], sheetIT: [] };
+  // El mes en curso debe aparecer SIEMPRE, aunque todavía no tenga ningún
+  // snapshot guardado en el historial (ej. recién empieza el mes, o aún no
+  // se ha hecho el "Guardar semana" de cierre) -- sus números salen de
+  // `state` en vivo más abajo, no de este objeto `meses`.
+  const mesActualParaLista = mesActualStr();
+  // Solo se agrega el mes en curso si lo cargado en vivo (datos.xlsx) de
+  // verdad trae citas de ese mes -- si el 1 de octubre datos.xlsx todavía es
+  // septiembre, no debe aparecer una columna "oct" repitiendo septiembre.
+  const vivoTraeMesActual = !!(state && state.citas && state.citas.some(r => {
+    const f = fechaYMD(r['Fecha']); return f && f.slice(0,7) === mesActualParaLista;
+  }));
+  if (vivoTraeMesActual && !meses[mesActualParaLista]) {
+    meses[mesActualParaLista] = { citas: [], cargos: [], sheetIT: [] };
   }
   const mesesOrdenados = Object.keys(meses).sort().filter(m => m >= EVOL_MES_INICIO);
   // Para Administrativo, "asistio"/resolveCoordExp deben poder cruzar contra
@@ -2995,40 +2994,38 @@ function computeEvolucionMensual() {
   // paciente desaparezca del cruce. El sheetIT sí se mantiene agrupado por
   // mes (es el eje temporal real del indicador).
   const citasTodas = mesesOrdenados.reduce((acc, m) => acc.concat(meses[m].citas), []);
-  // El mes de los datos en vivo se calcula SIEMPRE con los datos que están
-  // cargados ahora mismo en el dashboard (state.*), en vez de con el
-  // snapshot guardado del historial -- así esa columna queda idéntica a lo
-  // que se ve en las demás pestañas (Plática, Administrativo, Conversión,
-  // Add-ons), que tampoco filtran por fecha. Los meses ya cerrados
-  // (anteriores al de los datos en vivo) sí usan el historial, agrupado
-  // por la fecha real de cada fila.
+  // El mes actual (calendario de hoy) se calcula SIEMPRE con los datos que
+  // están cargados ahora mismo en el dashboard (state.*), en vez de con el
+  // snapshot guardado del historial -- así la columna del mes en curso
+  // queda idéntica a lo que se ve en las demás pestañas (Plática,
+  // Administrativo, Conversión, Add-ons), que tampoco filtran por fecha.
+  // Los meses ya cerrados (anteriores) sí usan el historial, agrupado por
+  // la fecha real de cada fila.
+  const mesActual = mesActualStr();
   const data = { platica: {}, administrativo: {}, conversion: {}, addons: {} };
-  // Total real de Plática por mes (num=cumplidas, total=totalParaPct), de UNA
-  // sola pasada sin filtro de coordinadora -- igual que la pestaña en vivo.
-  // OJO: no se puede obtener sumando el desglose por coordinadora
-  // (data.platica[m]): ese desglose llama a computePlatica() UNA VEZ POR
-  // CADA coordinadora (para que "extraCompleta" -- pacientes cuya primera
-  // vez es de una coordinadora pero la plática se la dio otra -- se le
-  // sume a quien SÍ dio la plática), y eso hace que, al sumar todos los
-  // desgloses, una misma paciente se cuente dos veces (una en la
-  // coordinadora de su primera vez, otra en la de la plática). El total
-  // real se calcula aparte, con una sola pasada sin ese efecto.
-  const platicaTotalPorMes = {};
+  const totales = { platica: {}, administrativo: {}, conversion: {}, addons: {} };
   mesesOrdenados.forEach(m => {
     const d = meses[m];
-    const esMesActual = (m === mesEnVivo);
+    const esMesActual = (m === mesActual) && vivoTraeMesActual;
     const citasMes = esMesActual ? state.citas : d.citas;
     const sheetITMes = esMesActual ? state.sheetIT : d.sheetIT;
     const cargosMes = esMesActual ? state.cargos : d.cargos;
-    const citasParaAdmin = esMesActual ? state.citas : citasTodas;
+    const citasParaAdmin = esMesActual ? state.citas : (d.citas.length ? d.citas : citasTodas);
     data.platica[m] = platicaPorCoordDeMes(citasMes);
-    const platicaUnaPasada = computePlatica(citasMes, null);
-    platicaTotalPorMes[m] = { num: platicaUnaPasada.cumplidas, total: platicaUnaPasada.totalParaPct };
     data.administrativo[m] = administrativoPorCoordDeMes(sheetITMes, citasParaAdmin);
     data.conversion[m] = conversionPorClinicaDeMes(citasMes);
     data.addons[m] = addonsPorCoordDeMes(cargosMes, citasMes);
+    // Totales del mes calculados EXACTAMENTE como la vista "Todas" de cada
+    // pestaña (no como suma/promedio de las filas), para que coincidan 1:1.
+    const pT = computePlatica(citasMes, null);
+    const eT = computeExperienciaResult(sheetITMes, citasParaAdmin, null);
+    const cT = computeConversionResult(citasMes, null);
+    totales.platica[m] = { num: pT.cumplidas, total: pT.totalParaPct };
+    totales.administrativo[m] = { num: eT.completo.length, total: eT.audited.length };
+    totales.conversion[m] = { pv: cT.pv, cap: cT.cap };
+    totales.addons[m] = sumTotalMes(data.addons[m], ['monto', 'count']);
   });
-  return { meses: mesesOrdenados, data, platicaTotalPorMes };
+  return { meses: mesesOrdenados, data, totales };
 }
 
 const MESES_CORTOS = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
@@ -3088,7 +3085,39 @@ function sumTotalMes(dataDelMes, keys) {
   return out;
 }
 
-function renderTablaEvolucion(containerId, meses, dataPorMes, cellFn, rowOrder, rowHeaderLabel, totalFn) {
+// Promedio simple (sin ponderar) del % de cada coordinadora, para la fila
+// "Total" de las tablas de Plática y Administrativo. A diferencia de sumar
+// num/total de todas (que le da más peso a quien tiene más pacientes), este
+// promedio le da el mismo peso a cada coordinadora -- ej. si 7 coordinadoras
+// están al 100% y 1 (Jacqueline) está al 97%, el Total sale
+// (100*7 + 97) / 8 = 99%, no 100%.
+function promedioPctMes(dataDelMes) {
+  const vals = Object.values(dataDelMes || {}).filter(v => v && v.total);
+  if (!vals.length) return { num: 0, total: 0 };
+  const pcts = vals.map(v => Math.round(v.num / v.total * 100));
+  const mean = pcts.reduce((a, b) => a + b, 0) / pcts.length;
+  let avg = Math.round(mean);
+  // Si el redondeo normal "infla" el promedio a 100% pero en realidad NO
+  // todas las coordinadoras están al 100% (ej. 7 al 100% + Jacqueline al
+  // 97% = 99.6%, que redondeado normal da 100%), se deja en 99% -- el 100%
+  // se reserva para cuando de verdad TODAS están al 100%, para no mandar
+  // una señal de "ya está perfecto" cuando no lo está.
+  if (avg === 100 && mean < 100) avg = 99;
+  return { num: avg, total: 100, esPromedio: true };
+}
+
+// Celda de la fila "Total" para tablas de % (Plática/Administrativo): el
+// valor ya viene como el promedio simple redondeado -- se muestra el % tal
+// cual, sin la fracción num/total (que no aplicaría a un promedio).
+function celdaPctPromedio(v, prev) {
+  if (!v || !v.total) return '<span style="color:var(--muted);">—</span>';
+  const pct = v.num;
+  const prevPct = (prev && prev.total) ? prev.num : null;
+  const cls = pct >= 90 ? 'v-green' : pct >= 70 ? 'v-amber' : 'v-red';
+  return `<strong class="${cls}">${pct}%</strong>${deltaPuntos(pct, prevPct)}<br><span style="font-size:10.5px;color:var(--muted);">promedio simple</span>`;
+}
+
+function renderTablaEvolucion(containerId, meses, dataPorMes, cellFn, rowOrder, rowHeaderLabel, totalFn, totalCellFn) {
   const el = document.getElementById(containerId);
   if (!el) return;
   const orderList = rowOrder || COORD_LIST;
@@ -3112,10 +3141,10 @@ function renderTablaEvolucion(containerId, meses, dataPorMes, cellFn, rowOrder, 
   let totalRow = '';
   if (totalFn) {
     const totalCells = meses.map((m, i) => {
-      const cur = totalFn(m, dataPorMes[m] || {});
+      const cur = totalFn(dataPorMes[m] || {}, m);
       const prevMes = i > 0 ? meses[i-1] : null;
-      const prev = prevMes ? totalFn(prevMes, dataPorMes[prevMes] || {}) : null;
-      return `<td style="text-align:center;">${cellFn(cur, prev)}</td>`;
+      const prev = prevMes ? totalFn(dataPorMes[prevMes] || {}, prevMes) : null;
+      return `<td style="text-align:center;">${(totalCellFn || cellFn)(cur, prev)}</td>`;
     }).join('');
     totalRow = `<tr style="font-weight:700;background:#f9fafb;border-top:2px solid var(--border);"><td class="td-name">Total</td>${totalCells}</tr>`;
   }
@@ -3186,24 +3215,16 @@ function renderGraficaEvolucion(canvasId, meses, dataPorMes, valueFn, rowOrder, 
 }
 
 function renderEvolucion() {
-  const { meses, data, platicaTotalPorMes } = computeEvolucionMensual();
-  // Total = agregado real (suma de completos / suma de auditados), igual
-  // que el "% Cumplimiento" de las pestañas en vivo -- es la forma
-  // estadísticamente correcta de leer "qué % del total está completo", a
-  // diferencia de promediar los % de cada coordinadora por igual (eso
-  // castiga de más a quien tiene pocos pacientes y distorsiona el total).
-  // Plática: el Total NO se saca sumando el desglose por coordinadora (eso
-  // duplica pacientes por el cruce "extraCompleta", ver computeEvolucionMensual)
-  // -- se usa platicaTotalPorMes, calculado aparte en una sola pasada sin
-  // filtro, igual que la pestaña en vivo.
+  const { meses, data, totales } = computeEvolucionMensual();
+  // Fila "Total" = mismo número que la pestaña correspondiente con filtro "Todas".
   renderTablaEvolucion('tabla-evol-platica', meses, data.platica, celdaPct, undefined, undefined,
-    m => platicaTotalPorMes[m] || { num: 0, total: 0 });
+    (v, m) => totales.platica[m], celdaPct);
   renderTablaEvolucion('tabla-evol-administrativo', meses, data.administrativo, celdaPct, undefined, undefined,
-    (m, v) => sumTotalMes(v, ['num', 'total']));
+    (v, m) => totales.administrativo[m], celdaPct);
   renderTablaEvolucion('tabla-evol-conversion', meses, data.conversion, celdaConversion, CLINICAS_FISICAS.map(g => g.label), 'Clínica',
-    (m, v) => sumTotalMes(v, ['pv', 'cap']));
-  renderTablaEvolucion('tabla-evol-addons', meses, data.addons, celdaAddons, undefined, undefined,
-    (m, v) => sumTotalMes(v, ['monto', 'count']));
+    (v, m) => totales.conversion[m]);
+  renderTablaEvolucion('tabla-evol-addons', meses, data.addons, celdaAddons, [...COORD_LIST, SIN_COORD], undefined,
+    (v, m) => totales.addons[m]);
 
   renderGraficaEvolucion('chart-evol-platica', meses, data.platica,
     v => v.total ? Math.round(v.num / v.total * 100) : null, COORD_LIST, v => v + '%');
@@ -3397,17 +3418,54 @@ const NOTES_KEY = 'fi_auditoria_notas';
 // que termina en "/exec".
 const NOTES_SYNC_URL = 'https://script.google.com/macros/s/AKfycbyOov0u7RaDrn9Rz_NP5O10Muk-mQIdGLnTSZoWVq4WzAY82ySdL-cxb-CYu_9M1ry_Kw/exec';
 
+// La fecha dentro de la llave de una nota se normaliza SIEMPRE a YYYY-MM-DD.
+// Antes, en Administrativo la llave usaba la fecha "cruda" del sheet de IT:
+// en vivo (datos.xlsx) es un Date -> "Fri Jul 31 2026 00:00:36 GMT-0600 (...)",
+// pero en los snapshots de historial/*.json la misma fecha llega como texto ISO
+// ("2026-07-31T06:00:36.000Z"). Las llaves no coincidían y Evolución mensual
+// ignoraba TODAS las notas de expediente de los meses cerrados.
+function fechaParaNota(f) {
+  if (f === null || f === undefined || f === '') return '';
+  if (f instanceof Date) return isNaN(f) ? '' : f.toISOString().slice(0,10);
+  const s = String(f).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s)) { const d = new Date(s); return isNaN(d) ? s.slice(0,10) : d.toISOString().slice(0,10); }
+  // toString() de un Date JS en cualquier idioma: quitar el "(hora estándar central)"
+  const d = new Date(s.replace(/\s*\(.*\)\s*$/, ''));
+  return isNaN(d) ? s : d.toISOString().slice(0,10);
+}
+function normalizarLlaveNota(k) {
+  const partes = String(k).split('|');
+  if (partes.length >= 3) partes[2] = fechaParaNota(partes[2]);
+  return partes.join('|');
+}
+let _notasCacheRaw = null, _notasCache = {};
 function getNotas() {
-  try { return JSON.parse(localStorage.getItem(NOTES_KEY) || '{}'); }
-  catch { return {}; }
+  let raw;
+  try { raw = localStorage.getItem(NOTES_KEY) || '{}'; } catch { return {}; }
+  if (raw === _notasCacheRaw) return _notasCache;
+  let obj = {};
+  try { obj = JSON.parse(raw); } catch { obj = {}; }
+  const norm = {};
+  Object.keys(obj).forEach(k => { norm[normalizarLlaveNota(k)] = obj[k]; });
+  // Las llaves originales también se conservan (para borrar/editar notas viejas)
+  Object.keys(obj).forEach(k => { if (!(k in norm)) norm[k] = obj[k]; });
+  _notasCacheRaw = raw; _notasCache = norm;
+  return norm;
 }
 
 function notaKey(tabla, paciente, fecha, concepto) {
-  return [tabla, normName(paciente || ''), fecha || '', (concepto || '').toLowerCase().trim()].join('|');
+  return [tabla, normName(paciente || ''), fechaParaNota(fecha), (concepto || '').toLowerCase().trim()].join('|');
 }
 
 function guardarNota(key, valor) {
-  const notas = getNotas();
+  let notas = {};
+  try { notas = JSON.parse(localStorage.getItem(NOTES_KEY) || '{}'); } catch { notas = {}; }
+  // Quitar versiones viejas de la misma llave (fecha en otro formato) para
+  // que editar/borrar una nota antigua no deje la versión anterior viva.
+  Object.keys(notas).forEach(k => {
+    if (k !== key && normalizarLlaveNota(k) === key) { delete notas[k]; enviarNotaANube(k, ''); }
+  });
   if (valor && valor.trim()) notas[key] = valor;
   else delete notas[key];
   try { localStorage.setItem(NOTES_KEY, JSON.stringify(notas)); }
