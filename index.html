@@ -1434,8 +1434,11 @@ function poblarFiltroPeriodo() {
   const disponiblesSet = new Set(Object.keys(meses));
   // El mes en curso siempre debe poder elegirse -- aunque todavía no tenga
   // ningún snapshot guardado en el historial, sus datos viven en `state`
-  // (lo que se acaba de cargar de datos.xlsx).
-  if (state.citas && state.citas.length > 0) disponiblesSet.add(mesActualStr());
+  // (lo que se acaba de cargar de datos.xlsx). Pero solo si state.citas ya
+  // trae datos fechados en ese mes -- si acaba de empezar el mes y
+  // datos.xlsx todavía es el del mes anterior, no se debe ofrecer el mes
+  // nuevo como si ya tuviera información.
+  if (estadoTieneDatosDeMes(mesActualStr())) disponiblesSet.add(mesActualStr());
   const disponibles = Array.from(disponiblesSet).sort();
   if (!disponibles.length) { selAnio.style.display = 'none'; selMes.style.display = 'none'; return; }
 
@@ -2952,14 +2955,29 @@ function addonsPorCoordDeMes(cargos, citas) {
 // Primer mes que se muestra en Evolución mensual -- los periodos anteriores
 // (datos parciales de antes de que existiera esta vista) se ocultan.
 const EVOL_MES_INICIO = '2026-06';
+// Comprueba si los datos EN VIVO (state.citas) de verdad tienen alguna fila
+// fechada dentro del mes dado -- no basta con que "hoy" caiga en ese mes: si
+// todavía no se ha cargado el export de ese mes (ej. es 1-oct y datos.xlsx
+// sigue siendo el de septiembre porque aún no se sube el de octubre),
+// state.citas sigue siendo de septiembre y NO debe tratarse como si ya
+// fuera el mes en curso -- eso duplicaba la columna del mes anterior bajo
+// el nombre del mes nuevo (ej. "OCT 26" con los mismos números de SEP 26).
+function estadoTieneDatosDeMes(mesStr) {
+  if (!state || !state.citas || !state.citas.length) return false;
+  return state.citas.some(r => {
+    const f = fechaYMD(fechaDeFila(r));
+    return f && f.slice(0, 7) === mesStr;
+  });
+}
 function computeEvolucionMensual() {
   const meses = buildMonthlyDatasets();
   // El mes en curso debe aparecer SIEMPRE, aunque todavía no tenga ningún
   // snapshot guardado en el historial (ej. recién empieza el mes, o aún no
   // se ha hecho el "Guardar semana" de cierre) -- sus números salen de
-  // `state` en vivo más abajo, no de este objeto `meses`.
+  // `state` en vivo más abajo, no de este objeto `meses`. Pero solo si ya
+  // hay datos en vivo de ESE mes (ver estadoTieneDatosDeMes).
   const mesActualParaLista = mesActualStr();
-  if (state && state.citas && state.citas.length > 0 && !meses[mesActualParaLista]) {
+  if (estadoTieneDatosDeMes(mesActualParaLista) && !meses[mesActualParaLista]) {
     meses[mesActualParaLista] = { citas: [], cargos: [], sheetIT: [] };
   }
   const mesesOrdenados = Object.keys(meses).sort().filter(m => m >= EVOL_MES_INICIO);
@@ -2981,7 +2999,7 @@ function computeEvolucionMensual() {
   const data = { platica: {}, administrativo: {}, conversion: {}, addons: {} };
   mesesOrdenados.forEach(m => {
     const d = meses[m];
-    const esMesActual = (m === mesActual) && state && state.citas && state.citas.length > 0;
+    const esMesActual = (m === mesActual) && estadoTieneDatosDeMes(mesActual);
     const citasMes = esMesActual ? state.citas : d.citas;
     const sheetITMes = esMesActual ? state.sheetIT : d.sheetIT;
     const cargosMes = esMesActual ? state.cargos : d.cargos;
@@ -3051,39 +3069,7 @@ function sumTotalMes(dataDelMes, keys) {
   return out;
 }
 
-// Promedio simple (sin ponderar) del % de cada coordinadora, para la fila
-// "Total" de las tablas de Plática y Administrativo. A diferencia de sumar
-// num/total de todas (que le da más peso a quien tiene más pacientes), este
-// promedio le da el mismo peso a cada coordinadora -- ej. si 7 coordinadoras
-// están al 100% y 1 (Jacqueline) está al 97%, el Total sale
-// (100*7 + 97) / 8 = 99%, no 100%.
-function promedioPctMes(dataDelMes) {
-  const vals = Object.values(dataDelMes || {}).filter(v => v && v.total);
-  if (!vals.length) return { num: 0, total: 0 };
-  const pcts = vals.map(v => Math.round(v.num / v.total * 100));
-  const mean = pcts.reduce((a, b) => a + b, 0) / pcts.length;
-  let avg = Math.round(mean);
-  // Si el redondeo normal "infla" el promedio a 100% pero en realidad NO
-  // todas las coordinadoras están al 100% (ej. 7 al 100% + Jacqueline al
-  // 97% = 99.6%, que redondeado normal da 100%), se deja en 99% -- el 100%
-  // se reserva para cuando de verdad TODAS están al 100%, para no mandar
-  // una señal de "ya está perfecto" cuando no lo está.
-  if (avg === 100 && mean < 100) avg = 99;
-  return { num: avg, total: 100, esPromedio: true };
-}
-
-// Celda de la fila "Total" para tablas de % (Plática/Administrativo): el
-// valor ya viene como el promedio simple redondeado -- se muestra el % tal
-// cual, sin la fracción num/total (que no aplicaría a un promedio).
-function celdaPctPromedio(v, prev) {
-  if (!v || !v.total) return '<span style="color:var(--muted);">—</span>';
-  const pct = v.num;
-  const prevPct = (prev && prev.total) ? prev.num : null;
-  const cls = pct >= 90 ? 'v-green' : pct >= 70 ? 'v-amber' : 'v-red';
-  return `<strong class="${cls}">${pct}%</strong>${deltaPuntos(pct, prevPct)}<br><span style="font-size:10.5px;color:var(--muted);">promedio simple</span>`;
-}
-
-function renderTablaEvolucion(containerId, meses, dataPorMes, cellFn, rowOrder, rowHeaderLabel, totalFn, totalCellFn) {
+function renderTablaEvolucion(containerId, meses, dataPorMes, cellFn, rowOrder, rowHeaderLabel, totalFn) {
   const el = document.getElementById(containerId);
   if (!el) return;
   const orderList = rowOrder || COORD_LIST;
@@ -3110,7 +3096,7 @@ function renderTablaEvolucion(containerId, meses, dataPorMes, cellFn, rowOrder, 
       const cur = totalFn(dataPorMes[m] || {});
       const prevMes = i > 0 ? meses[i-1] : null;
       const prev = prevMes ? totalFn(dataPorMes[prevMes] || {}) : null;
-      return `<td style="text-align:center;">${(totalCellFn || cellFn)(cur, prev)}</td>`;
+      return `<td style="text-align:center;">${cellFn(cur, prev)}</td>`;
     }).join('');
     totalRow = `<tr style="font-weight:700;background:#f9fafb;border-top:2px solid var(--border);"><td class="td-name">Total</td>${totalCells}</tr>`;
   }
@@ -3182,10 +3168,15 @@ function renderGraficaEvolucion(canvasId, meses, dataPorMes, valueFn, rowOrder, 
 
 function renderEvolucion() {
   const { meses, data } = computeEvolucionMensual();
+  // Total = agregado real (suma de completos / suma de auditados), igual
+  // que el "% Cumplimiento" de las pestañas en vivo -- es la forma
+  // estadísticamente correcta de leer "qué % del total está completo", a
+  // diferencia de promediar los % de cada coordinadora por igual (eso
+  // castiga de más a quien tiene pocos pacientes y distorsiona el total).
   renderTablaEvolucion('tabla-evol-platica', meses, data.platica, celdaPct, undefined, undefined,
-    v => promedioPctMes(v), celdaPctPromedio);
+    v => sumTotalMes(v, ['num', 'total']));
   renderTablaEvolucion('tabla-evol-administrativo', meses, data.administrativo, celdaPct, undefined, undefined,
-    v => promedioPctMes(v), celdaPctPromedio);
+    v => sumTotalMes(v, ['num', 'total']));
   renderTablaEvolucion('tabla-evol-conversion', meses, data.conversion, celdaConversion, CLINICAS_FISICAS.map(g => g.label), 'Clínica',
     v => sumTotalMes(v, ['pv', 'cap']));
   renderTablaEvolucion('tabla-evol-addons', meses, data.addons, celdaAddons, undefined, undefined,
