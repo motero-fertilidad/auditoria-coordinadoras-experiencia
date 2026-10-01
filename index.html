@@ -3061,7 +3061,14 @@ function promedioPctMes(dataDelMes) {
   const vals = Object.values(dataDelMes || {}).filter(v => v && v.total);
   if (!vals.length) return { num: 0, total: 0 };
   const pcts = vals.map(v => Math.round(v.num / v.total * 100));
-  const avg = Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length);
+  const mean = pcts.reduce((a, b) => a + b, 0) / pcts.length;
+  let avg = Math.round(mean);
+  // Si el redondeo normal "infla" el promedio a 100% pero en realidad NO
+  // todas las coordinadoras están al 100% (ej. 7 al 100% + Jacqueline al
+  // 97% = 99.6%, que redondeado normal da 100%), se deja en 99% -- el 100%
+  // se reserva para cuando de verdad TODAS están al 100%, para no mandar
+  // una señal de "ya está perfecto" cuando no lo está.
+  if (avg === 100 && mean < 100) avg = 99;
   return { num: avg, total: 100, esPromedio: true };
 }
 
