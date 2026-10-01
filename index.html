@@ -1432,10 +1432,12 @@ function poblarFiltroPeriodo() {
 
   const meses = buildMonthlyDatasets();
   const disponiblesSet = new Set(Object.keys(meses));
-  // El mes en curso siempre debe poder elegirse -- aunque todavía no tenga
-  // ningún snapshot guardado en el historial, sus datos viven en `state`
-  // (lo que se acaba de cargar de datos.xlsx).
-  if (state.citas && state.citas.length > 0) disponiblesSet.add(mesActualStr());
+  // Además de los meses del historial, se agregan los meses que de verdad
+  // trae lo cargado en vivo (datos.xlsx). Antes se agregaba SIEMPRE el mes del
+  // calendario (ej. "Octubre 2026" el 1-oct) aunque no hubiera ni una cita de
+  // ese mes cargada -- ahora solo aparece cuando ya hay datos de ese mes.
+  const vivo = (liveStateBackup && liveStateBackup.citas) || state.citas || [];
+  vivo.forEach(r => { const f = fechaYMD(r['Fecha']); if (f && /^\d{4}-\d{2}/.test(f)) disponiblesSet.add(f.slice(0,7)); });
   const disponibles = Array.from(disponiblesSet).sort();
   if (!disponibles.length) { selAnio.style.display = 'none'; selMes.style.display = 'none'; return; }
 
