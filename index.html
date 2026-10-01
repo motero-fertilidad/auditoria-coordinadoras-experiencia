@@ -1526,8 +1526,17 @@ function aplicarFiltroPeriodo() {
 function mesActualStr() {
   return new Date().toISOString().slice(0, 7);
 }
+// Meses cerrados a mano ANTES de que termine el mes calendario -- para
+// cuando ya se hizo el cierre de fin de mes y no se quiere que se sigan
+// editando notas mientras todavía es el último día. Agregar aquí "YYYY-MM"
+// y volver a subir el archivo; quitarlo de la lista para reabrir el mes.
+const MESES_CERRADOS_MANUAL = new Set([
+  '2026-09', // cerrado a petición de Maria Paula el 30-sep-2026
+]);
 function esMesCerrado(mesStr) {
-  return !!mesStr && mesStr < mesActualStr();
+  if (!mesStr) return false;
+  if (MESES_CERRADOS_MANUAL.has(mesStr)) return true;
+  return mesStr < mesActualStr();
 }
 
 // Dado un snapshot (el objeto {label, fecha_guardado, state} que se guarda o
@@ -2935,6 +2944,14 @@ function addonsPorCoordDeMes(cargos, citas) {
 const EVOL_MES_INICIO = '2026-06';
 function computeEvolucionMensual() {
   const meses = buildMonthlyDatasets();
+  // El mes en curso debe aparecer SIEMPRE, aunque todavía no tenga ningún
+  // snapshot guardado en el historial (ej. recién empieza el mes, o aún no
+  // se ha hecho el "Guardar semana" de cierre) -- sus números salen de
+  // `state` en vivo más abajo, no de este objeto `meses`.
+  const mesActualParaLista = new Date().toISOString().slice(0, 7);
+  if (state && state.citas && state.citas.length > 0 && !meses[mesActualParaLista]) {
+    meses[mesActualParaLista] = { citas: [], cargos: [], sheetIT: [] };
+  }
   const mesesOrdenados = Object.keys(meses).sort().filter(m => m >= EVOL_MES_INICIO);
   // Para Administrativo, "asistio"/resolveCoordExp deben poder cruzar contra
   // CUALQUIER cita del historial (no solo las del mismo mes que el registro
