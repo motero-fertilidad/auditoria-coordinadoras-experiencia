@@ -589,22 +589,16 @@ const DOCTOR_COORD_MET = {
   'guadalupe nolazco': 'Alondra',
 };
 
-const COORD_LIST = ['Viviana','Mariana','Reyna','Jimena','Lucy','Sharon','Jacqueline','Alondra','Yanelli','Subrogación','Margarita','Wendy'];
+const COORD_LIST = ['Viviana','Mariana','Reyna','Jimena','Lucy','Sharon','Jacqueline','Alondra','Yanelli'];
 
 // Agrupación de coordinadoras por clínica (para filtros y vista de Conversión)
+// NOTA: Subrogación y MEFIS (Margarita/Wendy) se quitaron del dashboard a
+// petición explícita -- esos pacientes/cargos ahora se excluyen por completo
+// de todos los conteos (ver esSubrogacion() y sus usos).
 const CLINIC_GROUPS = [
   { label: 'GDL',  coords: ['Viviana', 'Mariana'] },
   { label: 'CDMX', coords: ['Sharon', 'Reyna', 'Lucy', 'Jimena', 'Jacqueline'] },
   { label: 'MTP',  coords: ['Yanelli', 'Alondra'] },
-  // Subrogación no es una sede física — son pacientes de cualquier ciudad
-  // que llegan por una agencia de subrogación gestacional. Se agrupan
-  // aparte para no mezclarlos con las estadísticas de GDL/CDMX/MTP.
-  { label: 'SUB',  coords: ['Subrogación'] },
-  // MEFIS = Médicos Externos FI. Auditan los cargos de citas con médicos
-  // externos (que no forman parte del roster interno de ninguna sede),
-  // divididos por sede: Margarita para GDL, Wendy para CDMX (y MTP, donde
-  // por ahora no hay casos de médicos externos).
-  { label: 'MEFIS', coords: ['Margarita', 'Wendy'] },
 ];
 
 // Alias de nombre propio de cada coordinadora, para identificarla cuando
@@ -769,9 +763,10 @@ function coordFromProfAnyCity(profRaw, fecha) {
   return null;
 }
 
-// Pacientes de subrogación gestacional: sin importar qué doctor las atienda
-// o en qué ciudad, se le asignan siempre a la coordinadora "Subrogación".
-// Se detecta por:
+// Pacientes de subrogación gestacional: se excluyen por completo del
+// dashboard (a petición explícita) -- no se les asigna coordinadora ni
+// cuentan en ningún KPI (Resumen, Conversión, Plática, Administrativo,
+// Add-ons). Se detectan por:
 //  1) El tipo de consulta (Concepto) — "Consulta de Primera Vez IP's" (IP =
 //     "intended parents", los padres de intención) o "Valoración subrogada".
 //  2) La agencia de origen (Procedencia) — Gestacy, My Surrogacy Journey,
@@ -791,7 +786,9 @@ function esSubrogacion(row) {
 
 // Get coordinator from doctor name + city
 function getCoord(row, cityOverride) {
-  if (esSubrogacion(row)) return 'Subrogación';
+  // Subrogación se excluye del dashboard por completo (no es "sin
+  // coordinadora", es que esta paciente ni siquiera debe contarse aquí).
+  if (esSubrogacion(row)) return null;
   // Para "Captura ovular", el campo "Profesional" suele ser quien realizó el
   // procedimiento ese día (ej. Giovanni), no la doctora tratante de la
   // paciente. La doctora tratante real está en "Profesional Historia".
@@ -859,7 +856,7 @@ function getCoord(row, cityOverride) {
 // generó esta cita en particular (ej. Graves, Forrest Michael es paciente
 // del Dr. Armando Roque → Jimena, aunque Reyna haya agendado su ED).
 function getCoordByHistoria(row, cityOverride) {
-  if (esSubrogacion(row)) return 'Subrogación';
+  if (esSubrogacion(row)) return null;
   const raw = row['Profesional Historia'] || row['Profesional'] || '';
   const prof = normProf(raw);
   if (!prof) return null;
@@ -880,14 +877,10 @@ function getCoordByHistoria(row, cityOverride) {
   // aparece como Profesional Historia).
   const alias = matchCoordAlias(prof);
   if (alias) return alias;
-  // El doctor no está en ningún roster interno. Solo se manda a MEFIS
-  // (Margarita/Wendy) si la cita/concepto está marcada explícitamente como
-  // "(EX)" -- igual que isCapturaExcepcion()/isAddonExcepcion(). Si no trae
-  // esa marca, es probable que sea un estudio de laboratorio sin doctor
-  // asignado (ej. Espermatobioscopía, Fragmentación de ADN espermático) y NO
-  // debe contarse como médico externo -- se reporta aparte en Resumen
-  // General (ver esSinDoctorAsignado()).
-  if (esExternoTag(row)) return city === 'GDL' ? 'Margarita' : 'Wendy';
+  // El doctor no está en ningún roster interno. MEFIS (médicos externos FI)
+  // se quitó del dashboard -- estos casos ya no se asignan a nadie, quedan
+  // sin coordinadora (se reportan aparte en Resumen General, ver
+  // esSinDoctorAsignado()).
   return null;
 }
 
@@ -1524,7 +1517,15 @@ function aplicarFiltroPeriodo() {
 // siguiente (no hace falta ningún botón ni acción manual). El mes en curso
 // sigue abierto y editable hasta que termine.
 function mesActualStr() {
-  return new Date().toISOString().slice(0, 7);
+  // OJO: usar la fecha LOCAL del navegador, no toISOString() (que convierte
+  // a UTC). México está detrás de UTC, así que en la noche del último día
+  // del mes, toISOString() ya "ve" el mes siguiente aunque localmente
+  // todavía sea el último día -- esto causaba que, por unas horas al final
+  // de cada mes, el mes en curso se tratara como cerrado/histórico por
+  // error (ej. Administrativo/Plática de Evolución mensual dejaban de
+  // coincidir con las pestañas en vivo la noche del 30 de septiembre).
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
 }
 // Meses cerrados a mano ANTES de que termine el mes calendario -- para
 // cuando ya se hizo el cierre de fin de mes y no se quiere que se sigan
@@ -1602,9 +1603,9 @@ function renderConversion() {
   // "Primeras veces" y la tasa de conversión solo cuentan citas Terminada —
   // una cita reasignada o donde el paciente no asistió no debe inflar (ni
   // deflactar) el denominador de conversión. No asistencias se calcula aparte.
-  const allPV = rows.filter(r => isPV(r['Concepto']) && r['Estado'] === 'Terminada' && !isExternal(r));
-  const allNoAsiste = rows.filter(r => isPV(r['Concepto']) && r['Estado'] === 'No Asiste' && !isExternal(r));
-  const allCap = rows.filter(r => isCaptura(r['Concepto']) && r['Estado'] === 'Terminada' && !isExternal(r) && !isCapturaExcepcion(r['Obs.']));
+  const allPV = rows.filter(r => isPV(r['Concepto']) && r['Estado'] === 'Terminada' && !isExternal(r) && !esSubrogacion(r));
+  const allNoAsiste = rows.filter(r => isPV(r['Concepto']) && r['Estado'] === 'No Asiste' && !isExternal(r) && !esSubrogacion(r));
+  const allCap = rows.filter(r => isCaptura(r['Concepto']) && r['Estado'] === 'Terminada' && !isExternal(r) && !isCapturaExcepcion(r['Obs.']) && !esSubrogacion(r));
   const pvRows = filterByCoord(allPV, 'conversion');
   const noAsisteRows = filterByCoord(allNoAsiste, 'conversion');
   const capSeen = new Set();
@@ -1716,6 +1717,14 @@ function computeAddonsList(cargos, citas) {
     byPatient[name].push(r);
   });
 
+  // Pacientes de subrogación gestacional: se excluyen del todo (sus cargos
+  // no cuentan como add-ons de ninguna coordinadora). Se detectan por sus
+  // propias citas (el cargo en sí no suele traer el Concepto de subrogación).
+  const pacientesSubrogacion = new Set();
+  (citas || []).forEach(r => {
+    if (esSubrogacion(r)) pacientesSubrogacion.add(normName(r['Apellidos, Nombre']||''));
+  });
+
   rows.forEach(r => {
     const concepto = (r['Concepto']||'').toLowerCase();
     const nomProd = (r['Nombre Prod.']||'').toLowerCase();
@@ -1730,6 +1739,7 @@ function computeAddonsList(cargos, citas) {
     const usuarioAlta = r['Usuario Alta'] || '';
     if (uds < 0) return; // refunds
     if (montoNum === 0) return; // gratis — no cuenta como add-on
+    if (esSubrogacion(r) || pacientesSubrogacion.has(normName(name))) return;
     // Almacenamientos capturados por el usuario administrativo de renovaciones
     // no cuentan como add-on generado por una coordinadora de experiencia.
     if (concepto.includes('almacenamiento') &&
@@ -1952,10 +1962,8 @@ const COORD_MAP_SHEET = {
   'alondra':         'Alondra',
   'yanelli garcia':  'Yanelli',
   'yanelli':         'Yanelli',
-  'subrogacion':     'Subrogación',
-  'subrogación':     'Subrogación',
 };
-// Excluded: Externo, Híbrido, Valeria
+// Excluded: Externo, Híbrido, Valeria, Subrogación (se excluye del todo, ver esSubrogacion())
 
 function getCoordFromSheet(row) {
   const raw = normProf(row['coordinadora'] || row['Coordinadora'] || '');
@@ -2001,8 +2009,9 @@ function asistio(row, citasByName) {
 }
 
 // Si la coordinadora escribió "subrogación" en la nota de esa paciente, se
-// toma como corrección manual y manda a la paciente al grupo de
-// Subrogación, sin importar qué diga el sheet de IT o sus citas.
+// toma como corrección manual: la paciente se excluye del todo de
+// Administrativo (igual que cualquier otro caso de subrogación), sin
+// importar qué diga el sheet de IT o sus citas.
 function notaIndicaSubrogacion(paciente, dia_cita) {
   const notas = getNotas();
   const v = notas[notaKey('incompleto', paciente, dia_cita, null)] || '';
@@ -2010,15 +2019,14 @@ function notaIndicaSubrogacion(paciente, dia_cita) {
 }
 
 // Coordinadora real de la paciente para Administrativo: 1) si la nota dice
-// "subrogación", gana esa corrección manual; 2) si alguna de sus citas
-// tiene Concepto/Procedencia de subrogación (misma clasificación que usan
-// Cargos y Add-ons -- ver esSubrogacion()), es Subrogación aunque el sheet
-// de IT tenga puesta otra coordinadora o "Externo"; 3) si no, se usa el
-// valor de la columna "coordinadora" del sheet como antes.
+// "subrogación", o 2) si alguna de sus citas tiene Concepto/Procedencia de
+// subrogación (misma clasificación que usan Add-ons -- ver esSubrogacion()),
+// se excluye del todo (null); 3) si no, se usa el valor de la columna
+// "coordinadora" del sheet como antes.
 function resolveCoordExp(row, citasRowsByName) {
-  if (notaIndicaSubrogacion(row['paciente'], row['dia_cita'])) return 'Subrogación';
+  if (notaIndicaSubrogacion(row['paciente'], row['dia_cita'])) return null;
   const citasDeElla = citasRowsByName[normName(row['paciente'] || '')] || [];
-  if (citasDeElla.some(cr => esSubrogacion(cr))) return 'Subrogación';
+  if (citasDeElla.some(cr => esSubrogacion(cr))) return null;
   return getCoordFromSheet(row);
 }
 
@@ -2466,6 +2474,7 @@ function computePlatica(rows, coordFilter) {
     isPV(r['Concepto']) &&
     r['Estado'] === 'Terminada' &&
     !isExternal(r) &&
+    !esSubrogacion(r) &&
     hasStudy(r['Concepto'], r['Obs.']) &&
     (!coordFilter || getCoord(r, getCiudad(r)) === coordFilter)
   );
@@ -2475,6 +2484,7 @@ function computePlatica(rows, coordFilter) {
     isGine(r['Concepto']) &&
     r['Estado'] === 'Terminada' &&
     !isExternal(r) &&
+    !esSubrogacion(r) &&
     hasStudy(r['Concepto'], r['Obs.']) &&
     !isPV(r['Concepto']) &&
     (!coordFilter || getCoord(r, getCiudad(r)) === coordFilter)
@@ -2541,6 +2551,7 @@ function computePlatica(rows, coordFilter) {
   platicaRows.forEach(r => {
     const name = normName(r['Apellidos, Nombre']);
     if (namesInResultsBase.has(name) || extraCompletaNames.has(name)) return;
+    if (esSubrogacion(r)) return;
     const coord = getCoord(r, getCiudad(r));
     if (coordFilter && coord !== coordFilter) return;
     extraCompletaNames.add(name);
@@ -2690,9 +2701,9 @@ function renderPlatica() {
 // ─── RESUMEN ──────────────────────────────────────────────────────────────────
 function renderResumen() {
   const citas = state.citas || [];
-  const pvRows = citas.filter(r => isPV(r['Concepto']) && isPVCountable(r['Estado']) && !isExternal(r));
+  const pvRows = citas.filter(r => isPV(r['Concepto']) && isPVCountable(r['Estado']) && !isExternal(r) && !esSubrogacion(r));
   const capSeen2 = new Set();
-  const capRows = citas.filter(r => isCaptura(r['Concepto']) && r['Estado'] === 'Terminada' && !isExternal(r) && !isCapturaExcepcion(r['Obs.'])).filter(r => {
+  const capRows = citas.filter(r => isCaptura(r['Concepto']) && r['Estado'] === 'Terminada' && !isExternal(r) && !isCapturaExcepcion(r['Obs.']) && !esSubrogacion(r)).filter(r => {
     const key = (r['Apellidos, Nombre']||'').trim().toLowerCase();
     if (!key || capSeen2.has(key)) return false;
     capSeen2.add(key);
@@ -2791,8 +2802,8 @@ function show(id, visible) { const el=document.getElementById(id); if(el) el.sty
 // la pestaña Conversión) -- función pura, reutilizada por Evolución mensual.
 function computeConversionResult(citas, coordFilter) {
   const rows = citas || [];
-  const allPV = rows.filter(r => isPV(r['Concepto']) && r['Estado'] === 'Terminada' && !isExternal(r));
-  const allCap = rows.filter(r => isCaptura(r['Concepto']) && r['Estado'] === 'Terminada' && !isExternal(r) && !isCapturaExcepcion(r['Obs.']));
+  const allPV = rows.filter(r => isPV(r['Concepto']) && r['Estado'] === 'Terminada' && !isExternal(r) && !esSubrogacion(r));
+  const allCap = rows.filter(r => isCaptura(r['Concepto']) && r['Estado'] === 'Terminada' && !isExternal(r) && !isCapturaExcepcion(r['Obs.']) && !esSubrogacion(r));
   const pvRows = coordFilter ? allPV.filter(r => getCoord(r, getCiudad(r)) === coordFilter) : allPV;
   const capFiltered = coordFilter ? allCap.filter(r => getCoord(r, getCiudad(r)) === coordFilter) : allCap;
   const capSeen = new Set();
@@ -2868,10 +2879,10 @@ function platicaPorCoordDeMes(citas) {
   // de la coordinadora que realmente dio la plática -- desalineando esta tabla
   // de lo que se ve en la pestaña en vivo. Por eso aquí se llama
   // computePlatica una vez POR CADA coordinadora, igual que hace la pestaña.
-  // Yanelli y Subrogación no se muestran en esta tabla de Evolución mensual
-  // (a petición explícita) aunque sí sigan existiendo como coordinadoras en
-  // el resto del dashboard.
-  const EXCLUIR_DE_PLATICA_MES = new Set(['Yanelli', 'Subrogación']);
+  // Yanelli no se muestra en esta tabla de Evolución mensual (a petición
+  // explícita) aunque sí siga existiendo como coordinadora en el resto del
+  // dashboard.
+  const EXCLUIR_DE_PLATICA_MES = new Set(['Yanelli']);
   const byCoord = {};
   COORD_LIST.forEach(coord => {
     if (EXCLUIR_DE_PLATICA_MES.has(coord)) return;
@@ -2904,13 +2915,12 @@ function conversionPorCoordDeMes(citas) {
   return byCoord;
 }
 
-// Solo las sedes físicas (GDL/CDMX/MTP) -- se excluyen Subrogación y MEFIS,
-// que no son una "clínica" con embudo de conversión propio.
+// Solo las sedes físicas (GDL/CDMX/MTP).
 const CLINICAS_FISICAS = CLINIC_GROUPS.filter(g => ['GDL','CDMX','MTP'].includes(g.label));
 function conversionPorClinicaDeMes(citas) {
   const rows = citas || [];
-  const allPV = rows.filter(r => isPV(r['Concepto']) && r['Estado'] === 'Terminada' && !isExternal(r));
-  const allCap = rows.filter(r => isCaptura(r['Concepto']) && r['Estado'] === 'Terminada' && !isExternal(r) && !isCapturaExcepcion(r['Obs.']));
+  const allPV = rows.filter(r => isPV(r['Concepto']) && r['Estado'] === 'Terminada' && !isExternal(r) && !esSubrogacion(r));
+  const allCap = rows.filter(r => isCaptura(r['Concepto']) && r['Estado'] === 'Terminada' && !isExternal(r) && !isCapturaExcepcion(r['Obs.']) && !esSubrogacion(r));
   const byClinica = {};
   CLINICAS_FISICAS.forEach(group => {
     const groupCoords = new Set(group.coords);
@@ -2948,7 +2958,7 @@ function computeEvolucionMensual() {
   // snapshot guardado en el historial (ej. recién empieza el mes, o aún no
   // se ha hecho el "Guardar semana" de cierre) -- sus números salen de
   // `state` en vivo más abajo, no de este objeto `meses`.
-  const mesActualParaLista = new Date().toISOString().slice(0, 7);
+  const mesActualParaLista = mesActualStr();
   if (state && state.citas && state.citas.length > 0 && !meses[mesActualParaLista]) {
     meses[mesActualParaLista] = { citas: [], cargos: [], sheetIT: [] };
   }
@@ -2967,7 +2977,7 @@ function computeEvolucionMensual() {
   // Administrativo, Conversión, Add-ons), que tampoco filtran por fecha.
   // Los meses ya cerrados (anteriores) sí usan el historial, agrupado por
   // la fecha real de cada fila.
-  const mesActual = new Date().toISOString().slice(0, 7);
+  const mesActual = mesActualStr();
   const data = { platica: {}, administrativo: {}, conversion: {}, addons: {} };
   mesesOrdenados.forEach(m => {
     const d = meses[m];
@@ -3041,7 +3051,32 @@ function sumTotalMes(dataDelMes, keys) {
   return out;
 }
 
-function renderTablaEvolucion(containerId, meses, dataPorMes, cellFn, rowOrder, rowHeaderLabel, totalFn) {
+// Promedio simple (sin ponderar) del % de cada coordinadora, para la fila
+// "Total" de las tablas de Plática y Administrativo. A diferencia de sumar
+// num/total de todas (que le da más peso a quien tiene más pacientes), este
+// promedio le da el mismo peso a cada coordinadora -- ej. si 7 coordinadoras
+// están al 100% y 1 (Jacqueline) está al 97%, el Total sale
+// (100*7 + 97) / 8 = 99%, no 100%.
+function promedioPctMes(dataDelMes) {
+  const vals = Object.values(dataDelMes || {}).filter(v => v && v.total);
+  if (!vals.length) return { num: 0, total: 0 };
+  const pcts = vals.map(v => Math.round(v.num / v.total * 100));
+  const avg = Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length);
+  return { num: avg, total: 100, esPromedio: true };
+}
+
+// Celda de la fila "Total" para tablas de % (Plática/Administrativo): el
+// valor ya viene como el promedio simple redondeado -- se muestra el % tal
+// cual, sin la fracción num/total (que no aplicaría a un promedio).
+function celdaPctPromedio(v, prev) {
+  if (!v || !v.total) return '<span style="color:var(--muted);">—</span>';
+  const pct = v.num;
+  const prevPct = (prev && prev.total) ? prev.num : null;
+  const cls = pct >= 90 ? 'v-green' : pct >= 70 ? 'v-amber' : 'v-red';
+  return `<strong class="${cls}">${pct}%</strong>${deltaPuntos(pct, prevPct)}<br><span style="font-size:10.5px;color:var(--muted);">promedio simple</span>`;
+}
+
+function renderTablaEvolucion(containerId, meses, dataPorMes, cellFn, rowOrder, rowHeaderLabel, totalFn, totalCellFn) {
   const el = document.getElementById(containerId);
   if (!el) return;
   const orderList = rowOrder || COORD_LIST;
@@ -3068,7 +3103,7 @@ function renderTablaEvolucion(containerId, meses, dataPorMes, cellFn, rowOrder, 
       const cur = totalFn(dataPorMes[m] || {});
       const prevMes = i > 0 ? meses[i-1] : null;
       const prev = prevMes ? totalFn(dataPorMes[prevMes] || {}) : null;
-      return `<td style="text-align:center;">${cellFn(cur, prev)}</td>`;
+      return `<td style="text-align:center;">${(totalCellFn || cellFn)(cur, prev)}</td>`;
     }).join('');
     totalRow = `<tr style="font-weight:700;background:#f9fafb;border-top:2px solid var(--border);"><td class="td-name">Total</td>${totalCells}</tr>`;
   }
@@ -3141,9 +3176,9 @@ function renderGraficaEvolucion(canvasId, meses, dataPorMes, valueFn, rowOrder, 
 function renderEvolucion() {
   const { meses, data } = computeEvolucionMensual();
   renderTablaEvolucion('tabla-evol-platica', meses, data.platica, celdaPct, undefined, undefined,
-    v => sumTotalMes(v, ['num', 'total']));
+    v => promedioPctMes(v), celdaPctPromedio);
   renderTablaEvolucion('tabla-evol-administrativo', meses, data.administrativo, celdaPct, undefined, undefined,
-    v => sumTotalMes(v, ['num', 'total']));
+    v => promedioPctMes(v), celdaPctPromedio);
   renderTablaEvolucion('tabla-evol-conversion', meses, data.conversion, celdaConversion, CLINICAS_FISICAS.map(g => g.label), 'Clínica',
     v => sumTotalMes(v, ['pv', 'cap']));
   renderTablaEvolucion('tabla-evol-addons', meses, data.addons, celdaAddons, undefined, undefined,
