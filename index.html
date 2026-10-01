@@ -1432,13 +1432,13 @@ function poblarFiltroPeriodo() {
 
   const meses = buildMonthlyDatasets();
   const disponiblesSet = new Set(Object.keys(meses));
-  // El mes en curso siempre debe poder elegirse -- aunque todavía no tenga
-  // ningún snapshot guardado en el historial, sus datos viven en `state`
-  // (lo que se acaba de cargar de datos.xlsx). Pero solo si state.citas ya
-  // trae datos fechados en ese mes -- si acaba de empezar el mes y
-  // datos.xlsx todavía es el del mes anterior, no se debe ofrecer el mes
-  // nuevo como si ya tuviera información.
-  if (estadoTieneDatosDeMes(mesActualStr())) disponiblesSet.add(mesActualStr());
+  // El mes de los datos en vivo siempre debe poder elegirse -- aunque
+  // todavía no tenga ningún snapshot guardado en el historial, sus datos
+  // viven en `state` (lo que se acaba de cargar de datos.xlsx). Ver
+  // mesDeDatosEnVivo(): esto no es necesariamente "hoy" en el calendario
+  // real, sino el mes real de las citas ya cargadas.
+  const mesVivo = mesDeDatosEnVivo();
+  if (mesVivo) disponiblesSet.add(mesVivo);
   const disponibles = Array.from(disponiblesSet).sort();
   if (!disponibles.length) { selAnio.style.display = 'none'; selMes.style.display = 'none'; return; }
 
@@ -1463,7 +1463,7 @@ function aplicarFiltroPeriodo() {
   const selAnio = document.getElementById('filtro-anio');
   const selMes = document.getElementById('filtro-mes');
   const mesSeleccionado = selMes ? selMes.value : '';
-  const esMesEnCurso = !!mesSeleccionado && mesSeleccionado === mesActualStr();
+  const esMesEnCurso = !!mesSeleccionado && mesSeleccionado === mesDeDatosEnVivo();
 
   if (!mesSeleccionado || esMesEnCurso) {
     // "Todos los meses" O el mes en curso -- ambos casos muestran los datos
@@ -2955,30 +2955,37 @@ function addonsPorCoordDeMes(cargos, citas) {
 // Primer mes que se muestra en Evolución mensual -- los periodos anteriores
 // (datos parciales de antes de que existiera esta vista) se ocultan.
 const EVOL_MES_INICIO = '2026-06';
-// Comprueba si los datos EN VIVO (state.citas) de verdad tienen alguna fila
-// fechada dentro del mes dado -- no basta con que "hoy" caiga en ese mes: si
-// todavía no se ha cargado el export de ese mes (ej. es 1-oct y datos.xlsx
-// sigue siendo el de septiembre porque aún no se sube el de octubre),
-// state.citas sigue siendo de septiembre y NO debe tratarse como si ya
-// fuera el mes en curso -- eso duplicaba la columna del mes anterior bajo
-// el nombre del mes nuevo (ej. "OCT 26" con los mismos números de SEP 26).
-function estadoTieneDatosDeMes(mesStr) {
-  if (!state || !state.citas || !state.citas.length) return false;
-  return state.citas.some(r => {
+// A qué mes calendario pertenecen los datos EN VIVO cargados ahora mismo en
+// `state` (el mes más reciente presente en state.citas) -- OJO: esto NO es
+// necesariamente "hoy" en el calendario real. Ej.: ya es 1 de octubre pero
+// todavía no se sube el datos.xlsx de octubre -- state.citas sigue siendo
+// el de septiembre, así que el mes "en vivo" sigue siendo septiembre. Si en
+// vez de esto se usara el mes real de hoy, en cuanto empezara octubre
+// Evolución mensual saltaría a leer septiembre del historial archivado (una
+// foto guardada, que puede no coincidir con lo que las pestañas en vivo
+// muestran ahora mismo con datos más completos/corregidos) -- quedando
+// desincronizada de las demás pestañas, que sí siguen leyendo `state` en
+// vivo sin importar la fecha.
+function mesDeDatosEnVivo() {
+  if (!state || !state.citas || !state.citas.length) return null;
+  let max = null;
+  state.citas.forEach(r => {
     const f = fechaYMD(fechaDeFila(r));
-    return f && f.slice(0, 7) === mesStr;
+    if (!f) return;
+    const m = f.slice(0, 7);
+    if (!max || m > max) max = m;
   });
+  return max;
 }
 function computeEvolucionMensual() {
   const meses = buildMonthlyDatasets();
-  // El mes en curso debe aparecer SIEMPRE, aunque todavía no tenga ningún
-  // snapshot guardado en el historial (ej. recién empieza el mes, o aún no
-  // se ha hecho el "Guardar semana" de cierre) -- sus números salen de
-  // `state` en vivo más abajo, no de este objeto `meses`. Pero solo si ya
-  // hay datos en vivo de ESE mes (ver estadoTieneDatosDeMes).
-  const mesActualParaLista = mesActualStr();
-  if (estadoTieneDatosDeMes(mesActualParaLista) && !meses[mesActualParaLista]) {
-    meses[mesActualParaLista] = { citas: [], cargos: [], sheetIT: [] };
+  // El mes de los datos en vivo debe aparecer SIEMPRE, aunque todavía no
+  // tenga ningún snapshot guardado en el historial (ej. recién se cargó el
+  // export y aún no se ha hecho el "Guardar semana" de cierre) -- sus
+  // números salen de `state` en vivo más abajo, no de este objeto `meses`.
+  const mesEnVivo = mesDeDatosEnVivo();
+  if (mesEnVivo && !meses[mesEnVivo]) {
+    meses[mesEnVivo] = { citas: [], cargos: [], sheetIT: [] };
   }
   const mesesOrdenados = Object.keys(meses).sort().filter(m => m >= EVOL_MES_INICIO);
   // Para Administrativo, "asistio"/resolveCoordExp deben poder cruzar contra
@@ -2988,28 +2995,40 @@ function computeEvolucionMensual() {
   // paciente desaparezca del cruce. El sheetIT sí se mantiene agrupado por
   // mes (es el eje temporal real del indicador).
   const citasTodas = mesesOrdenados.reduce((acc, m) => acc.concat(meses[m].citas), []);
-  // El mes actual (calendario de hoy) se calcula SIEMPRE con los datos que
-  // están cargados ahora mismo en el dashboard (state.*), en vez de con el
-  // snapshot guardado del historial -- así la columna del mes en curso
-  // queda idéntica a lo que se ve en las demás pestañas (Plática,
-  // Administrativo, Conversión, Add-ons), que tampoco filtran por fecha.
-  // Los meses ya cerrados (anteriores) sí usan el historial, agrupado por
-  // la fecha real de cada fila.
-  const mesActual = mesActualStr();
+  // El mes de los datos en vivo se calcula SIEMPRE con los datos que están
+  // cargados ahora mismo en el dashboard (state.*), en vez de con el
+  // snapshot guardado del historial -- así esa columna queda idéntica a lo
+  // que se ve en las demás pestañas (Plática, Administrativo, Conversión,
+  // Add-ons), que tampoco filtran por fecha. Los meses ya cerrados
+  // (anteriores al de los datos en vivo) sí usan el historial, agrupado
+  // por la fecha real de cada fila.
   const data = { platica: {}, administrativo: {}, conversion: {}, addons: {} };
+  // Total real de Plática por mes (num=cumplidas, total=totalParaPct), de UNA
+  // sola pasada sin filtro de coordinadora -- igual que la pestaña en vivo.
+  // OJO: no se puede obtener sumando el desglose por coordinadora
+  // (data.platica[m]): ese desglose llama a computePlatica() UNA VEZ POR
+  // CADA coordinadora (para que "extraCompleta" -- pacientes cuya primera
+  // vez es de una coordinadora pero la plática se la dio otra -- se le
+  // sume a quien SÍ dio la plática), y eso hace que, al sumar todos los
+  // desgloses, una misma paciente se cuente dos veces (una en la
+  // coordinadora de su primera vez, otra en la de la plática). El total
+  // real se calcula aparte, con una sola pasada sin ese efecto.
+  const platicaTotalPorMes = {};
   mesesOrdenados.forEach(m => {
     const d = meses[m];
-    const esMesActual = (m === mesActual) && estadoTieneDatosDeMes(mesActual);
+    const esMesActual = (m === mesEnVivo);
     const citasMes = esMesActual ? state.citas : d.citas;
     const sheetITMes = esMesActual ? state.sheetIT : d.sheetIT;
     const cargosMes = esMesActual ? state.cargos : d.cargos;
     const citasParaAdmin = esMesActual ? state.citas : citasTodas;
     data.platica[m] = platicaPorCoordDeMes(citasMes);
+    const platicaUnaPasada = computePlatica(citasMes, null);
+    platicaTotalPorMes[m] = { num: platicaUnaPasada.cumplidas, total: platicaUnaPasada.totalParaPct };
     data.administrativo[m] = administrativoPorCoordDeMes(sheetITMes, citasParaAdmin);
     data.conversion[m] = conversionPorClinicaDeMes(citasMes);
     data.addons[m] = addonsPorCoordDeMes(cargosMes, citasMes);
   });
-  return { meses: mesesOrdenados, data };
+  return { meses: mesesOrdenados, data, platicaTotalPorMes };
 }
 
 const MESES_CORTOS = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
@@ -3093,9 +3112,9 @@ function renderTablaEvolucion(containerId, meses, dataPorMes, cellFn, rowOrder, 
   let totalRow = '';
   if (totalFn) {
     const totalCells = meses.map((m, i) => {
-      const cur = totalFn(dataPorMes[m] || {});
+      const cur = totalFn(m, dataPorMes[m] || {});
       const prevMes = i > 0 ? meses[i-1] : null;
-      const prev = prevMes ? totalFn(dataPorMes[prevMes] || {}) : null;
+      const prev = prevMes ? totalFn(prevMes, dataPorMes[prevMes] || {}) : null;
       return `<td style="text-align:center;">${cellFn(cur, prev)}</td>`;
     }).join('');
     totalRow = `<tr style="font-weight:700;background:#f9fafb;border-top:2px solid var(--border);"><td class="td-name">Total</td>${totalCells}</tr>`;
@@ -3167,20 +3186,24 @@ function renderGraficaEvolucion(canvasId, meses, dataPorMes, valueFn, rowOrder, 
 }
 
 function renderEvolucion() {
-  const { meses, data } = computeEvolucionMensual();
+  const { meses, data, platicaTotalPorMes } = computeEvolucionMensual();
   // Total = agregado real (suma de completos / suma de auditados), igual
   // que el "% Cumplimiento" de las pestañas en vivo -- es la forma
   // estadísticamente correcta de leer "qué % del total está completo", a
   // diferencia de promediar los % de cada coordinadora por igual (eso
   // castiga de más a quien tiene pocos pacientes y distorsiona el total).
+  // Plática: el Total NO se saca sumando el desglose por coordinadora (eso
+  // duplica pacientes por el cruce "extraCompleta", ver computeEvolucionMensual)
+  // -- se usa platicaTotalPorMes, calculado aparte en una sola pasada sin
+  // filtro, igual que la pestaña en vivo.
   renderTablaEvolucion('tabla-evol-platica', meses, data.platica, celdaPct, undefined, undefined,
-    v => sumTotalMes(v, ['num', 'total']));
+    m => platicaTotalPorMes[m] || { num: 0, total: 0 });
   renderTablaEvolucion('tabla-evol-administrativo', meses, data.administrativo, celdaPct, undefined, undefined,
-    v => sumTotalMes(v, ['num', 'total']));
+    (m, v) => sumTotalMes(v, ['num', 'total']));
   renderTablaEvolucion('tabla-evol-conversion', meses, data.conversion, celdaConversion, CLINICAS_FISICAS.map(g => g.label), 'Clínica',
-    v => sumTotalMes(v, ['pv', 'cap']));
+    (m, v) => sumTotalMes(v, ['pv', 'cap']));
   renderTablaEvolucion('tabla-evol-addons', meses, data.addons, celdaAddons, undefined, undefined,
-    v => sumTotalMes(v, ['monto', 'count']));
+    (m, v) => sumTotalMes(v, ['monto', 'count']));
 
   renderGraficaEvolucion('chart-evol-platica', meses, data.platica,
     v => v.total ? Math.round(v.num / v.total * 100) : null, COORD_LIST, v => v + '%');
