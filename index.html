@@ -340,7 +340,7 @@
       <label>Coordinadora:</label>
     </div>
     <div class="kpi-grid">
-      <div class="kpi-card k-neutral"><div class="kpi-label">Pacientes auditados</div><div class="kpi-num" id="e-total">—</div><div class="kpi-sub">Primeras veces en el sheet de IT</div></div>
+      <div class="kpi-card k-neutral"><div class="kpi-label">Pacientes auditados</div><div class="kpi-num" id="e-total">—</div><div class="kpi-sub">Todas las primeras veces (citas Terminadas)</div></div>
       <div class="kpi-card k-green"><div class="kpi-label">Expediente completo</div><div class="kpi-num" id="e-completo">—</div><div class="kpi-sub">Demog + Contacto + CP + Clasificación + Factura</div></div>
       <div class="kpi-card k-red"><div class="kpi-label">Expediente incompleto</div><div class="kpi-num" id="e-incompleto">—</div><div class="kpi-sub">Al menos un campo faltante</div></div>
       <div class="kpi-card k-amber"><div class="kpi-label">% Cumplimiento</div><div class="kpi-num" id="e-pct">—</div><div class="kpi-sub">Completitud del expediente</div></div>
@@ -2122,8 +2122,46 @@ function notaResuelveIncompleto(paciente, dia_cita) {
 // Cálculo puro de Administrativo para un set arbitrario de datos (sheetIT +
 // citas) -- lo usan tanto renderExperiencia() como la vista de Evolución
 // mensual, para que ambas SIEMPRE den el mismo número con las mismas reglas.
-function computeExperienciaResult(sheetIT, citas, coordFilter) {
+// El sheet de IT solo trae a las pacientes que "probablemente tengan algo"
+// pendiente, así que el universo auditado se completa con TODAS las citas de
+// primera vez (Terminada, mismas reglas que Conversión) que no tienen fila en
+// el sheet: se agregan como filas virtuales con todo "sí" (expediente
+// completo). Una cita se considera ya cubierta por el sheet si hay una fila de
+// la misma paciente con dia_cita a ±3 días.
+function filasVirtualesPrimeraVez(sheetIT, citasPV) {
+  const sheetPorNombre = {};
+  (sheetIT || []).forEach(r => {
+    const k = normName(r['paciente'] || '');
+    const f = fmtDate(r['dia_cita']);
+    if (!k || !f || f === '—') return;
+    (sheetPorNombre[k] = sheetPorNombre[k] || []).push(f);
+  });
+  const vistos = new Set();
+  const out = [];
+  (citasPV || []).forEach(c => {
+    if (!isPV(c['Concepto']) || c['Estado'] !== 'Terminada' || isExternal(c) || esSubrogacion(c)) return;
+    const k = normName(c['Apellidos, Nombre'] || '');
+    const f = fmtDate(c['Fecha']);
+    if (!k || !f || f === '—') return;
+    const clave = k + '|' + f;
+    if (vistos.has(clave)) return;
+    vistos.add(clave);
+    if ((sheetPorNombre[k] || []).some(fs => Math.abs(difDiasCargo(fs, f)) <= 3)) return;
+    const coord = getCoord(c, getCiudad(c));
+    if (!coord) return;
+    out.push({
+      paciente: c['Apellidos, Nombre'], dia_cita: f, servicio: c['Concepto'],
+      demog: 'sí', contacto: 'sí', CP: 'sí', clasificacion: 'sí', f_emitida: 'sí',
+      doctor_nombre: c['Profesional Historia'] || c['Profesional'] || '',
+      coordinadora: coord, sede_cita: getCiudad(c), __virtual: true,
+    });
+  });
+  return out;
+}
+
+function computeExperienciaResult(sheetIT, citas, coordFilter, citasPV) {
   const { citasByName, citasRowsByName } = buildCitasIndexByName(citas || []);
+  if (citasPV) sheetIT = [...(sheetIT || []), ...filasVirtualesPrimeraVez(sheetIT, citasPV)];
   const audited = (sheetIT || []).filter(r => {
     const coord = resolveCoordExp(r, citasRowsByName);
     if (!coord) return false;
@@ -2167,7 +2205,7 @@ function renderExperiencia() {
   }
 
   const { audited, completo, incompleto, revisadosPorNota, citasRowsByName } =
-    computeExperienciaResult(state.sheetIT, state.citas, coordFilter);
+    computeExperienciaResult(state.sheetIT, state.citas, coordFilter, state.citas);
   const resolveCoordExpLocal = r => resolveCoordExp(r, citasRowsByName);
   const pct = audited.length > 0 ? Math.round(completo.length / audited.length * 100) : 0;
 
@@ -2968,8 +3006,8 @@ function platicaPorCoordDeMes(citas) {
   return byCoord;
 }
 
-function administrativoPorCoordDeMes(sheetIT, citas) {
-  const { audited, completo, citasRowsByName } = computeExperienciaResult(sheetIT, citas, null);
+function administrativoPorCoordDeMes(sheetIT, citas, citasPV) {
+  const { audited, completo, citasRowsByName } = computeExperienciaResult(sheetIT, citas, null, citasPV);
   const completoSet = new Set(completo);
   const byCoord = {};
   audited.forEach(r => {
@@ -3097,7 +3135,7 @@ function computeEvolucionMensual() {
     data.platica[m] = platicaPorCoordDeMes(citasMes);
     const platicaUnaPasada = computePlatica(citasMes, null);
     platicaTotalPorMes[m] = { num: platicaUnaPasada.cumplidas, total: platicaUnaPasada.totalParaPct };
-    data.administrativo[m] = administrativoPorCoordDeMes(sheetITMes, citasParaAdmin);
+    data.administrativo[m] = administrativoPorCoordDeMes(sheetITMes, citasParaAdmin, citasMes);
     data.conversion[m] = conversionPorClinicaDeMes(citasMes);
     data.addons[m] = addonsPorCoordDeMes(cargosMes, citasMes);
   });
