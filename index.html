@@ -2082,8 +2082,29 @@ function resolveCoordExp(row, citasRowsByName) {
   if (notaIndicaSubrogacion(row['paciente'], row['dia_cita'])) return null;
   const citasDeElla = citasRowsByName[normName(row['paciente'] || '')] || [];
   if (citasDeElla.some(cr => esSubrogacion(cr))) return null;
+  // A partir del 1-oct-2026, si el doctor de la fila es uno de los que se
+  // reasignaron en esa fecha (Mariana→Araceli, Jairo/Mónica→Eva,
+  // Giovanni/Eugenia→Ana), manda el doctor: la columna "coordinadora" del
+  // sheet de IT suele seguir con la coordinadora anterior (ej. un paciente
+  // del Dr. Giovanni capturado como "Reyna") y por eso Ana salía con 0
+  // pacientes auditados. Antes de esa fecha no se toca nada (histórico).
+  const fDia = fmtDate(row['dia_cita']);
+  if (fDia && fDia !== '—' && fDia >= ADMIN_DOCTOR_OVERRIDE_DESDE) {
+    const dr = normProf(row['doctor_nombre'] || '');
+    if (dr) {
+      const reasignados = {};
+      [...REASIGNACIONES_GDL, ...REASIGNACIONES_CDMX].forEach(r => {
+        if (r.desde >= ADMIN_DOCTOR_OVERRIDE_DESDE && r.desde <= fDia) Object.assign(reasignados, r.doctores);
+      });
+      const mapa = { ...mapaGDL(fDia), ...mapaCDMX(fDia) };
+      for (const doctor of Object.keys(reasignados)) {
+        if (dr.includes(normProf(doctor))) return mapa[doctor] || reasignados[doctor];
+      }
+    }
+  }
   return getCoordFromSheet(row);
 }
+const ADMIN_DOCTOR_OVERRIDE_DESDE = '2026-10-01';
 
 // Si la coordinadora escribió una nota explicando que el dato SÍ está
 // (ej. "ya tiene CP", "se corrigió, sí tiene clasificación"), el
