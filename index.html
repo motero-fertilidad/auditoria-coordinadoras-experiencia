@@ -2067,9 +2067,27 @@ function asistio(row, citasByName) {
 // toma como corrección manual: la paciente se excluye del todo de
 // Administrativo (igual que cualquier otro caso de subrogación), sin
 // importar qué diga el sheet de IT o sus citas.
-function notaIndicaSubrogacion(paciente, dia_cita) {
+// Las notas de "incompleto" se guardaron con la llave armada con dia_cita TAL
+// CUAL venía en el dato en vivo (un objeto Date, que al volverse texto da
+// "Fri Jul 31 2026 00:00:36 GMT-0600 (...)"). Pero los meses archivados en el
+// Historial guardan esa misma fecha como texto ISO ("2026-07-31T06:00:36.000Z"),
+// así que la llave no coincidía y TODAS las notas dejaban de aplicarse a los
+// meses archivados (ej. septiembre en Evolución mensual salía 81% en vez de
+// ~99%). Esta función busca la nota con ambos formatos de fecha.
+function notaDeIncompleto(paciente, dia_cita) {
   const notas = getNotas();
-  const v = notas[notaKey('incompleto', paciente, dia_cita, null)] || '';
+  const claves = [notaKey('incompleto', paciente, dia_cita, null)];
+  if (typeof dia_cita === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(dia_cita)) {
+    const d = new Date(dia_cita);
+    if (!isNaN(d)) claves.push(notaKey('incompleto', paciente, String(d), null));
+  } else if (dia_cita instanceof Date && !isNaN(dia_cita)) {
+    claves.push(notaKey('incompleto', paciente, dia_cita.toISOString(), null));
+  }
+  for (const k of claves) if (notas[k]) return { key: k, texto: notas[k] };
+  return { key: claves[0], texto: '' };
+}
+function notaIndicaSubrogacion(paciente, dia_cita) {
+  const v = notaDeIncompleto(paciente, dia_cita).texto || '';
   return /subrogaci/i.test(v);
 }
 
@@ -2114,8 +2132,7 @@ const ADMIN_DOCTOR_OVERRIDE_DESDE = '2026-10-01';
 // seguir contando como incompleto (solo cambia de coordinadora).
 function notaResuelveIncompleto(paciente, dia_cita) {
   if (notaIndicaSubrogacion(paciente, dia_cita)) return false;
-  const notas = getNotas();
-  const v = notas[notaKey('incompleto', paciente, dia_cita, null)];
+  const v = notaDeIncompleto(paciente, dia_cita).texto;
   return !!(v && v.trim());
 }
 
@@ -2128,6 +2145,9 @@ function notaResuelveIncompleto(paciente, dia_cita) {
 // el sheet: se agregan como filas virtuales con todo "sí" (expediente
 // completo). Una cita se considera ya cubierta por el sheet si hay una fila de
 // la misma paciente con dia_cita a ±3 días.
+// Esta regla aplica SOLO desde octubre 2026; los meses anteriores se quedan
+// como se vieron al cierre (auditados = solo los del sheet de IT).
+const AUDITORIA_TODAS_PV_DESDE = '2026-10-01';
 function filasVirtualesPrimeraVez(sheetIT, citasPV) {
   const sheetPorNombre = {};
   (sheetIT || []).forEach(r => {
@@ -2142,7 +2162,7 @@ function filasVirtualesPrimeraVez(sheetIT, citasPV) {
     if (!isPV(c['Concepto']) || c['Estado'] !== 'Terminada' || isExternal(c) || esSubrogacion(c)) return;
     const k = normName(c['Apellidos, Nombre'] || '');
     const f = fmtDate(c['Fecha']);
-    if (!k || !f || f === '—') return;
+    if (!k || !f || f === '—' || f < AUDITORIA_TODAS_PV_DESDE) return;
     const clave = k + '|' + f;
     if (vistos.has(clave)) return;
     vistos.add(clave);
@@ -3580,9 +3600,13 @@ function escHtml(s) {
 }
 
 function notaCellHTML(tabla, paciente, fecha, concepto) {
-  const key = notaKey(tabla, paciente, fecha, concepto);
+  let key = notaKey(tabla, paciente, fecha, concepto);
   const notas = getNotas();
-  const texto = notas[key] || '';
+  let texto = notas[key] || '';
+  if (!texto && tabla === 'incompleto') {
+    const alt = notaDeIncompleto(paciente, fecha);
+    if (alt.texto) { key = alt.key; texto = alt.texto; }
+  }
 
   // Si el registro pertenece a un mes que ya cerró (dejó de ser el mes en
   // curso), la nota queda congelada: se ve, pero ya nadie puede editarla
