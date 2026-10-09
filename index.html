@@ -600,6 +600,10 @@ const REASIGNACIONES_CDMX = [
       'giovanni lópez salamanca':     'Ana',
       'eugenia moran orozco':         'Ana',
       'eugenia morán orozco':         'Ana',
+      // Reyna sale a partir del 1-oct: sus doctores restantes (Rubén
+      // González y Jaime Hidalgo) quedan SIN coordinadora (a petición).
+      'ruben gonzalez ruiz':          null,
+      'jaime antonio hidalgo carrera':null,
     },
   },
 ];
@@ -618,6 +622,20 @@ function mapaCDMX(fecha) {
 const DOCTOR_COORD_MET = {
   'guadalupe nolazco': 'Alondra',
 };
+// Desde el 1 de octubre de 2026 la coordinadora de experiencia de Metepec es
+// Yanelli (ya no Alondra). Antes de esa fecha sigue contando Alondra.
+const REASIGNACIONES_MET = [
+  { desde: '2026-10-01', doctores: { 'guadalupe nolazco': 'Yanelli' } },
+];
+function mapaMET(fecha) {
+  const f = fmtDate(fecha);
+  if (!f || f === '—') return DOCTOR_COORD_MET;
+  let mapa = DOCTOR_COORD_MET;
+  for (const r of REASIGNACIONES_MET) {
+    if (f >= r.desde) mapa = { ...mapa, ...r.doctores };
+  }
+  return mapa;
+}
 
 const COORD_LIST = ['Viviana','Mariana','Reyna','Jimena','Lucy','Sharon','Jacqueline','Alondra','Yanelli','Araceli','Eva','Ana'];
 
@@ -627,7 +645,9 @@ const COORD_LIST = ['Viviana','Mariana','Reyna','Jimena','Lucy','Sharon','Jacque
 // (jun-sep) se quedan tal cual en Evolución mensual y en el filtro Año/Mes.
 // Como ya no tienen doctores asignados desde octubre, dejan de aparecer
 // solas en cualquier mes nuevo.
-const COORD_INACTIVAS = new Set(['Lucy', 'Sharon', 'Mariana']);
+// También Reyna (sale en octubre) y Alondra (desde octubre Metepec es de
+// Yanelli).
+const COORD_INACTIVAS = new Set(['Lucy', 'Sharon', 'Mariana', 'Reyna', 'Alondra']);
 
 // Agrupación de coordinadoras por clínica (para filtros y vista de Conversión)
 // NOTA: Subrogación y MEFIS (Margarita/Wendy) se quitaron del dashboard a
@@ -796,7 +816,7 @@ function coordFromUsuarioAlta(raw) {
 function coordFromProfAnyCity(profRaw, fecha) {
   const prof = normProf(profRaw || '');
   if (!prof) return null;
-  const allDoctors = {...mapaGDL(fecha), ...mapaCDMX(fecha), ...DOCTOR_COORD_MET};
+  const allDoctors = {...mapaGDL(fecha), ...mapaCDMX(fecha), ...mapaMET(fecha)};
   for (const [doctor, coord] of Object.entries(allDoctors)) {
     if (prof.includes(normProf(doctor))) return coord;
   }
@@ -838,7 +858,7 @@ function getCoord(row, cityOverride) {
   const fecha = fechaDeFila(row);
   const map = city === 'GDL' ? mapaGDL(fecha)
              : city === 'CDMX' ? mapaCDMX(fecha)
-             : city === 'MET' ? DOCTOR_COORD_MET
+             : city === 'MET' ? mapaMET(fecha)
              : {};
 
   // 1) Coincidencia directa por doctor@ tratante en el campo de profesional
@@ -856,7 +876,7 @@ function getCoord(row, cityOverride) {
   const usuario = normProf(row['Usuario Crea'] || '');
   let coordFromUsuarioDoctor = null;
   if (usuario) {
-    const allDoctors = {...mapaGDL(fecha), ...mapaCDMX(fecha), ...DOCTOR_COORD_MET};
+    const allDoctors = {...mapaGDL(fecha), ...mapaCDMX(fecha), ...mapaMET(fecha)};
     for (const [doctor, coord] of Object.entries(allDoctors)) {
       if (usuario.includes(normProf(doctor))) { coordFromUsuarioDoctor = coord; break; }
     }
@@ -865,12 +885,15 @@ function getCoord(row, cityOverride) {
   // 3) Alias corto de la propia coordinadora en el campo de profesional
   //    -> cubre casos donde ella realizó el procedimiento directamente
   //    (ej. un cargo con "Profesional Historia: Leslie Sharon Gamiño Sanchez").
-  const profAlias = matchCoordAlias(prof);
+  // Desde el 1-oct-2026 las coordinadoras que salieron (COORD_INACTIVAS) ya
+  // no reciben nada por alias (ni como profesional ni como "Usuario Crea").
+  const activaEn = c => (c && COORD_INACTIVAS.has(c) && fmtDate(fecha) >= '2026-10-01') ? null : c;
+  const profAlias = activaEn(matchCoordAlias(prof));
 
   // 4) Alias corto de la coordinadora en "Usuario Crea" -> cubre citas o
   //    cargos que ella generó pero que atendió otro profesional (enfermería,
   //    laboratorio, etc.), que es el caso más común de add-ons "huérfanos".
-  const usuarioAlias = matchCoordAlias(usuario);
+  const usuarioAlias = activaEn(matchCoordAlias(usuario));
 
   // Desempate: si dos coordinadoras de la MISMA sede comparten una sola
   // doctora (ej. Alondra y Yanelli con la Dra. Nolazco en Metepec), el
@@ -904,7 +927,7 @@ function getCoordByHistoria(row, cityOverride) {
   const fecha = fechaDeFila(row);
   const map = city === 'GDL' ? mapaGDL(fecha)
              : city === 'CDMX' ? mapaCDMX(fecha)
-             : city === 'MET' ? DOCTOR_COORD_MET
+             : city === 'MET' ? mapaMET(fecha)
              : {};
   for (const [doctor, coord] of Object.entries(map)) {
     if (prof.includes(normProf(doctor))) return coord;
@@ -2111,16 +2134,19 @@ function resolveCoordExp(row, citasRowsByName) {
     const dr = normProf(row['doctor_nombre'] || '');
     if (dr) {
       const reasignados = {};
-      [...REASIGNACIONES_GDL, ...REASIGNACIONES_CDMX].forEach(r => {
+      [...REASIGNACIONES_GDL, ...REASIGNACIONES_CDMX, ...REASIGNACIONES_MET].forEach(r => {
         if (r.desde >= ADMIN_DOCTOR_OVERRIDE_DESDE && r.desde <= fDia) Object.assign(reasignados, r.doctores);
       });
-      const mapa = { ...mapaGDL(fDia), ...mapaCDMX(fDia) };
+      const mapa = { ...mapaGDL(fDia), ...mapaCDMX(fDia), ...mapaMET(fDia) };
       for (const doctor of Object.keys(reasignados)) {
-        if (dr.includes(normProf(doctor))) return mapa[doctor] || reasignados[doctor];
+        if (dr.includes(normProf(doctor))) return mapa[doctor] || null;
       }
     }
   }
-  return getCoordFromSheet(row);
+  const cSheet = getCoordFromSheet(row);
+  // Coordinadoras que ya salieron no reciben pacientes de octubre en adelante.
+  if (cSheet && COORD_INACTIVAS.has(cSheet) && fDia && fDia >= ADMIN_DOCTOR_OVERRIDE_DESDE) return null;
+  return cSheet;
 }
 const ADMIN_DOCTOR_OVERRIDE_DESDE = '2026-10-01';
 
@@ -3013,10 +3039,9 @@ function platicaPorCoordDeMes(citas) {
   // de la coordinadora que realmente dio la plática -- desalineando esta tabla
   // de lo que se ve en la pestaña en vivo. Por eso aquí se llama
   // computePlatica una vez POR CADA coordinadora, igual que hace la pestaña.
-  // Yanelli no se muestra en esta tabla de Evolución mensual (a petición
-  // explícita) aunque sí siga existiendo como coordinadora en el resto del
-  // dashboard.
-  const EXCLUIR_DE_PLATICA_MES = new Set(['Yanelli']);
+  // Antes Yanelli no se mostraba aquí; desde octubre es la coordinadora de
+  // Metepec, así que ya no se excluye (en meses previos no tiene datos).
+  const EXCLUIR_DE_PLATICA_MES = new Set();
   const byCoord = {};
   COORD_LIST.forEach(coord => {
     if (EXCLUIR_DE_PLATICA_MES.has(coord)) return;
