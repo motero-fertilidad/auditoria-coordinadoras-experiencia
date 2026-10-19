@@ -636,9 +636,10 @@ const DOCTOR_COORD_MET = {
 };
 // Desde el 1 de octubre de 2026 la coordinadora de experiencia de Metepec es
 // Yanelli (ya no Alondra). Antes de esa fecha sigue contando Alondra.
-const REASIGNACIONES_MET = [
-  { desde: '2026-10-01', doctores: { 'guadalupe nolazco': 'Yanelli' } },
-];
+// OJO: Alondra sigue siendo la coordinadora de Metepec en Add-ons, Plática y
+// Evolución mensual. Yanelli SOLO aparece en Administrativo (ver
+// resolveCoordExp), por eso aquí no hay reasignaciones.
+const REASIGNACIONES_MET = [];
 function mapaMET(fecha) {
   const f = fmtDate(fecha);
   if (!f || f === '—') return DOCTOR_COORD_MET;
@@ -659,7 +660,15 @@ const COORD_LIST = ['Viviana','Mariana','Reyna','Jimena','Lucy','Sharon','Jacque
 // solas en cualquier mes nuevo.
 // También Reyna (sale en octubre) y Alondra (desde octubre Metepec es de
 // Yanelli).
-const COORD_INACTIVAS = new Set(['Lucy', 'Sharon', 'Mariana', 'Reyna', 'Alondra']);
+const COORD_INACTIVAS = new Set(['Lucy', 'Sharon', 'Mariana', 'Reyna']);
+
+// Botones de filtro que NO se muestran por pestaña: Yanelli solo en
+// Administrativo ('experiencia'); Alondra en todas menos Administrativo.
+const FILTRO_OCULTO_POR_PANEL = {
+  addons:      new Set(['Yanelli']),
+  platica:     new Set(['Yanelli']),
+  experiencia: new Set(['Alondra']),
+};
 
 // Agrupación de coordinadoras por clínica (para filtros y vista de Conversión)
 // NOTA: Subrogación y MEFIS (Margarita/Wendy) se quitaron del dashboard a
@@ -722,7 +731,8 @@ function initFilters() {
     allBtn.onclick = () => setFilter(panel, null, allBtn);
     bar.appendChild(allBtn);
     CLINIC_GROUPS.forEach(group => {
-      const coordsActivas = group.coords.filter(c => !COORD_INACTIVAS.has(c));
+      const ocultas = FILTRO_OCULTO_POR_PANEL[panel] || new Set();
+      const coordsActivas = group.coords.filter(c => !COORD_INACTIVAS.has(c) && !ocultas.has(c));
       if (!coordsActivas.length) return;
       const sep = document.createElement('span');
       sep.className = 'filter-sep';
@@ -899,7 +909,10 @@ function getCoord(row, cityOverride) {
   //    (ej. un cargo con "Profesional Historia: Leslie Sharon Gamiño Sanchez").
   // Desde el 1-oct-2026 las coordinadoras que salieron (COORD_INACTIVAS) ya
   // no reciben nada por alias (ni como profesional ni como "Usuario Crea").
-  const activaEn = c => (c && COORD_INACTIVAS.has(c) && fmtDate(fecha) >= '2026-10-01') ? null : c;
+  // Yanelli solo existe en Administrativo: en Add-ons/Plática/Evolución todo
+  // lo de Metepec cuenta a Alondra.
+  const activaEn = c => c === 'Yanelli' ? 'Alondra'
+    : (c && COORD_INACTIVAS.has(c) && fmtDate(fecha) >= '2026-10-01') ? null : c;
   const profAlias = activaEn(matchCoordAlias(prof));
 
   // 4) Alias corto de la coordinadora en "Usuario Crea" -> cubre citas o
@@ -951,7 +964,7 @@ function getCoordByHistoria(row, cityOverride) {
   // Alias corto de la propia coordinadora en el campo (ej. ella misma
   // aparece como Profesional Historia).
   const alias = matchCoordAlias(prof);
-  if (alias) return alias;
+  if (alias) return alias === 'Yanelli' ? 'Alondra' : alias;
   // El doctor no está en ningún roster interno. MEFIS (médicos externos FI)
   // se quitó del dashboard -- estos casos ya no se asignan a nadie, quedan
   // sin coordinadora (se reportan aparte en Resumen General, ver
@@ -2157,6 +2170,12 @@ function resolveCoordExp(row, citasRowsByName) {
     }
   }
   const cSheet = getCoordFromSheet(row);
+  // Administrativo: desde el 1-oct-2026 Metepec (Dra. Nolazco / Alondra en el
+  // sheet) se audita a nombre de Yanelli. En el resto de pestañas sigue Alondra.
+  if (fDia && fDia !== '—' && fDia >= ADMIN_DOCTOR_OVERRIDE_DESDE) {
+    const dr2 = normProf(row['doctor_nombre'] || '');
+    if (cSheet === 'Alondra' || (dr2 && dr2.includes('nolazco'))) return 'Yanelli';
+  }
   // Coordinadoras que ya salieron no reciben pacientes de octubre en adelante.
   if (cSheet && COORD_INACTIVAS.has(cSheet) && fDia && fDia >= ADMIN_DOCTOR_OVERRIDE_DESDE) return null;
   return cSheet;
