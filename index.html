@@ -1069,7 +1069,7 @@ const ADDON_DONACION = [
   // ovodonors" (traslado), por eso se cubren singular/plural y variantes.
   'ovodonor traslado', 'ovodonors traslado', 'traslado ovodonor', 'traslado de ovodonor',
   'ovodonor fresco', 'ovodonors fresco', 'ovodonor en fresco', 'ovodonors en fresco',
-  'viaticos ovodonor', 'viáticos ovodonor',
+  // "Viaticos ovodonors" NO es add-on (se quitó a petición).
 ];
 const ADDON_VITRI = ['[ex] vitrificación', '[ex] vitrificacion', 'vitrificación de ovocitos'];
 // Cuando el Check up Ginecológico se vendió en combo con Fertilidad, el HAM/AMH
@@ -1930,6 +1930,8 @@ function computeAddonsList(cargos, citas) {
       }
     } else if (combined.includes('embryoscope') || combined.includes('kit interno')) {
       push({fecha,paciente:name,ciudad:c,addon:r['Nombre Prod.']||r['Concepto']||'EmbryoScope',cat:'Embryoscope',monto,coord:null});
+    } else if (combined.includes('wellness')) {
+      push({fecha,paciente:name,ciudad:c,addon:r['Nombre Prod.']||r['Concepto']||'Servicios Wellness',cat:'Servicios Wellness',monto,coord:null});
     } else if (combined.includes('concierge')) {
       push({fecha,paciente:name,ciudad:c,addon:'Servicio Concierge',cat:'Concierge partos',monto,coord:null});
     } else if (concepto === 'farmacia' || nomProd) {
@@ -2022,7 +2024,8 @@ function renderAddons() {
     'Almacenamiento 5 años':'b-teal',
     'Suplementos':'b-grey',
     'Embryoscope':'b-blue',
-    'Concierge partos':'b-teal'
+    'Concierge partos':'b-teal',
+    'Servicios Wellness':'b-green'
   };
 
   document.getElementById('tbody-addons').innerHTML = filteredAddons.length === 0
