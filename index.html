@@ -1847,6 +1847,9 @@ function computeAddonsList(cargos, citas) {
     if (isAddonExcepcion(r['Concepto']) || isAddonExcepcion(r['Nombre Prod.'])) {
       return;
     }
+    // Add-ons que se pasan de septiembre a octubre (ver ADDONS_MOVIDOS_A_OCT):
+    // se quitan de septiembre aquí y se inyectan en octubre al final.
+    if (ADDONS_MOVIDOS_A_OCT.some(m => m.match(normName(name), fecha, combined))) return;
 
     // Helper para push con profHist incluido
     const push = (obj) => addons.push({...obj, _profHist: profHist, _usuarioAlta: usuarioAlta});
@@ -1987,8 +1990,29 @@ function computeAddonsList(cargos, citas) {
     }
   });
 
+  // Inyectar en octubre los add-ons movidos desde septiembre (a petición):
+  // solo cuando este conjunto de cargos es de octubre.
+  if (rows.some(r => String(fmtDate(r['F. Cargo'])).startsWith('2026-10'))) {
+    ADDONS_MOVIDOS_A_OCT.forEach(m => addons.push({
+      fecha: '2026-10-01', paciente: m.paciente, ciudad: m.ciudad, addon: m.addon,
+      cat: m.cat, monto: m.monto, coord: m.coord
+    }));
+  }
+
   return addons;
 }
+
+// Add-ons de septiembre que la usuaria pidió contar en octubre, con Jacqueline
+// (Bustos Jimenez, Leslie: Ovodonor Traslado y Ovodonor fresco, cargados el
+// 30-sep-2026). Se quitan de septiembre y aparecen en octubre.
+const ADDONS_MOVIDOS_A_OCT = [
+  { paciente: 'Bustos Jimenez, Leslie', addon: 'Ovodonor Traslado', monto: 50000, kw: 'ovodonor traslado' },
+  { paciente: 'Bustos Jimenez, Leslie', addon: 'Ovodonor fresco',   monto: 70000, kw: 'ovodonor fresco' },
+].map(m => ({
+  ...m, ciudad: 'Ciudad de México', cat: 'Donación de gametos', coord: 'Jacqueline',
+  match: (nombreNorm, fecha, combined) =>
+    nombreNorm === normName(m.paciente) && fecha === '2026-09-30' && combined.includes(m.kw),
+}));
 
 function renderAddons() {
   const addons = computeAddonsList(state.cargos, state.citas);
