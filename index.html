@@ -1070,8 +1070,11 @@ const ADDON_DONACION = [
   'ovodonor traslado', 'ovodonors traslado', 'traslado ovodonor', 'traslado de ovodonor',
   'ovodonor fresco', 'ovodonors fresco', 'ovodonor en fresco', 'ovodonors en fresco',
   // "Viaticos ovodonors" NO es add-on (se quitó a petición).
+  // Semen LAFER: en los cargos se escribe "Laffer semen congelado 1466" (doble f).
+  'laffer', 'lafer',
 ];
-const ADDON_VITRI = ['[ex] vitrificación', '[ex] vitrificacion', 'vitrificación de ovocitos'];
+const ADDON_DONACION_EXTERNOS = [normName('Ojeda Jimenez, Blanca Irene'), normName('Coello Artica, Natalia')];
+const ADDON_VITRI =['[ex] vitrificación', '[ex] vitrificacion', 'vitrificación de ovocitos'];
 // Cuando el Check up Ginecológico se vendió en combo con Fertilidad, el HAM/AMH
 // ya viene incluido en el precio del combo — no debe contarse como add-on aparte.
 const GINE_FERTILIDAD_KW = ['gine + fertilidad', 'gine+fertilidad', 'gine y fertilidad',
@@ -1847,6 +1850,9 @@ function computeAddonsList(cargos, citas) {
     if (isAddonExcepcion(r['Concepto']) || isAddonExcepcion(r['Nombre Prod.'])) {
       return;
     }
+    // Pacientes externos: su donación de esperma LAFER no es add-on de ninguna
+    // coordinadora (a petición).
+    if (ADDON_DONACION_EXTERNOS.includes(normName(name)) && combined.includes('lafer')) return;
     // Add-ons que se pasan de septiembre a octubre (ver ADDONS_MOVIDOS_A_OCT):
     // se quitan de septiembre aquí y se inyectan en octubre al final.
     if (ADDONS_MOVIDOS_A_OCT.some(m => m.match(normName(name), fecha, combined))) return;
