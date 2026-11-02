@@ -2163,6 +2163,40 @@ function asistio(row, citasByName) {
 // así que la llave no coincidía y TODAS las notas dejaban de aplicarse a los
 // meses archivados (ej. septiembre en Evolución mensual salía 81% en vez de
 // ~99%). Esta función busca la nota con ambos formatos de fecha.
+//
+// OJO (zona horaria): la llave de esas notas lleva "GMT-0600 (hora estándar
+// central)", que cambia según la zona horaria/idioma del navegador. Una
+// coordinadora en otra zona (o con el navegador en otro idioma) NO encontraba
+// las notas escritas desde México y veía, por ejemplo, 18% en vez de 100%.
+// Por eso, además de las llaves exactas, se busca por paciente + día de
+// calendario (YYYY-MM-DD) sacado de la propia llave, sin importar la zona.
+const MESES_EN = {jan:'01',feb:'02',mar:'03',apr:'04',may:'05',jun:'06',jul:'07',aug:'08',sep:'09',oct:'10',nov:'11',dec:'12'};
+function ymdDeFechaNota(f) {
+  if (f instanceof Date) {
+    if (isNaN(f)) return null;
+    return f.getFullYear() + '-' + String(f.getMonth() + 1).padStart(2, '0') + '-' + String(f.getDate()).padStart(2, '0');
+  }
+  const s = String(f == null ? '' : f);
+  let m = s.match(/^(\d{4}-\d{2}-\d{2})/);            // ISO o YYYY-MM-DD
+  if (m) return m[1];
+  m = s.match(/^[A-Za-z]{3} ([A-Za-z]{3}) (\d{1,2}) (\d{4})/); // "Sat May 23 2026 00:00:36 GMT..."
+  if (m && MESES_EN[m[1].toLowerCase()]) return m[3] + '-' + MESES_EN[m[1].toLowerCase()] + '-' + m[2].padStart(2, '0');
+  return null;
+}
+let _idxIncompletoRaw = null, _idxIncompleto = null;
+function indiceNotasIncompleto(notas) {
+  const raw = localStorage.getItem(NOTES_KEY) || '';
+  if (_idxIncompleto && _idxIncompletoRaw === raw) return _idxIncompleto;
+  const idx = {};
+  for (const k of Object.keys(notas)) {
+    if (!k.startsWith('incompleto|') || !notas[k]) continue;
+    const p = k.split('|');
+    const ymd = ymdDeFechaNota(p[2]);
+    if (ymd) idx[p[1] + '|' + ymd] = k;
+  }
+  _idxIncompletoRaw = raw; _idxIncompleto = idx;
+  return idx;
+}
 function notaDeIncompleto(paciente, dia_cita) {
   const notas = getNotas();
   const claves = [notaKey('incompleto', paciente, dia_cita, null)];
@@ -2173,6 +2207,12 @@ function notaDeIncompleto(paciente, dia_cita) {
     claves.push(notaKey('incompleto', paciente, dia_cita.toISOString(), null));
   }
   for (const k of claves) if (notas[k]) return { key: k, texto: notas[k] };
+  // Búsqueda independiente de la zona horaria (paciente + día de calendario).
+  const ymd = ymdDeFechaNota(dia_cita);
+  if (ymd) {
+    const k = indiceNotasIncompleto(notas)[normName(paciente || '') + '|' + ymd];
+    if (k && notas[k]) return { key: k, texto: notas[k] };
+  }
   return { key: claves[0], texto: '' };
 }
 function notaIndicaSubrogacion(paciente, dia_cita) {
