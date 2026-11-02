@@ -1073,7 +1073,8 @@ const ADDON_DONACION = [
   // Semen LAFER: en los cargos se escribe "Laffer semen congelado 1466" (doble f).
   'laffer', 'lafer',
 ];
-const ADDON_DONACION_EXTERNOS = [normName('Ojeda Jimenez, Blanca Irene'), normName('Coello Artica, Natalia')];
+const WELLNESS_KW = ['nutricion', 'nutrición', 'psicolog', 'acupuntura', 'masaje'];
+const ADDON_DONACION_EXTERNOS =[normName('Ojeda Jimenez, Blanca Irene'), normName('Coello Artica, Natalia')];
 const ADDON_VITRI =['[ex] vitrificación', '[ex] vitrificacion', 'vitrificación de ovocitos'];
 // Cuando el Check up Ginecológico se vendió en combo con Fertilidad, el HAM/AMH
 // ya viene incluido en el precio del combo — no debe contarse como add-on aparte.
@@ -1943,7 +1944,10 @@ function computeAddonsList(cargos, citas) {
       }
     } else if (combined.includes('embryoscope') || combined.includes('kit interno')) {
       push({fecha,paciente:name,ciudad:c,addon:r['Nombre Prod.']||r['Concepto']||'EmbryoScope',cat:'Embryoscope',monto,coord:null});
-    } else if (combined.includes('wellness')) {
+    } else if (combined.includes('wellness') ||
+               // Sesiones/consultas wellness: nutrición, psicología, acupuntura
+               // y masaje -- solo desde octubre 2026 (meses cerrados no cambian).
+               (fecha >= '2026-10-01' && WELLNESS_KW.some(k => combined.includes(k)))) {
       push({fecha,paciente:name,ciudad:c,addon:r['Nombre Prod.']||r['Concepto']||'Servicios Wellness',cat:'Servicios Wellness',monto,coord:null});
     } else if (combined.includes('concierge')) {
       push({fecha,paciente:name,ciudad:c,addon:'Servicio Concierge',cat:'Concierge partos',monto,coord:null});
