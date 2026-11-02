@@ -1480,7 +1480,10 @@ function loadFile(input, type) {
 }
 
 function updateWeekBadge(rows) {
-  const dates = rows.map(r => parseDate(r['Fecha'])).filter(Boolean);
+  // Las pláticas de resultados agendadas a futuro (ej. noviembre) no definen
+  // el periodo que se está auditando, así que no cuentan para este rango.
+  const base = rows.filter(r => !isPlatica(r['Concepto']));
+  const dates = (base.length ? base : rows).map(r => parseDate(r['Fecha'])).filter(Boolean);
   if (!dates.length) return;
   const min = new Date(Math.min(...dates)), max = new Date(Math.max(...dates));
   const fmt = d => d.toLocaleDateString('es-MX',{day:'2-digit',month:'short'});
@@ -2022,7 +2025,9 @@ const ADDONS_MOVIDOS_A_OCT = [
 }));
 
 function renderAddons() {
-  const addons = computeAddonsList(state.cargos, state.citas);
+  // Los add-ons sin coordinadora son de pacientes externos: se quitan de la
+  // lista y de todas las sumas (a petición), igual que en Evolución mensual.
+  const addons = computeAddonsList(state.cargos, state.citas).filter(a => a.coord);
 
   // Apply coordinadora filter
   const filteredAddons = activeFilters['addons']
@@ -2820,7 +2825,21 @@ function computePlatica(rows, coordFilter) {
   const namesInResultsBase = new Set(resultsBase.map(r => r.name));
   const extraCompletaNames = new Set();
   const extraCompleta = [];
+  // Pláticas agendadas para un mes POSTERIOR al de los datos (ej. noviembre
+  // cuando se audita octubre) solo sirven para marcar a quien ya tiene su
+  // primera vez en este corte (tienePlatica); NO se suman como "completas
+  // extra" de este mes.
+  let mesDatos = null;
+  rows.forEach(r => {
+    if (isPlatica(r['Concepto'])) return;
+    const f = fmtDate(fechaDeFila(r));
+    if (f && f !== '—') { const m = f.slice(0, 7); if (!mesDatos || m > mesDatos) mesDatos = m; }
+  });
   platicaRows.forEach(r => {
+    if (mesDatos) {
+      const fp = fmtDate(r['Fecha']);
+      if (fp && fp !== '—' && fp.slice(0, 7) > mesDatos) return;
+    }
     const name = normName(r['Apellidos, Nombre']);
     if (namesInResultsBase.has(name) || extraCompletaNames.has(name)) return;
     if (esSubrogacion(r)) return;
@@ -3208,14 +3227,18 @@ function conversionPorClinicaDeMes(citas) {
   return byClinica;
 }
 
+
 function addonsPorCoordDeMes(cargos, citas) {
   const addons = computeAddonsList(cargos, citas);
   const byCoord = {};
   addons.forEach(a => {
-    if (!a.coord) return;
-    if (!byCoord[a.coord]) byCoord[a.coord] = { monto: 0, count: 0 };
-    byCoord[a.coord].monto += Number(a.monto) || 0;
-    byCoord[a.coord].count++;
+    // Add-ons sin coordinadora = pacientes externos: no cuentan (igual que en
+    // la pestaña Add-ons, ver renderAddons).
+    const c = a.coord;
+    if (!c) return;
+    if (!byCoord[c]) byCoord[c] = { monto: 0, count: 0 };
+    byCoord[c].monto += Number(a.monto) || 0;
+    byCoord[c].count++;
   });
   return byCoord;
 }
@@ -3238,6 +3261,9 @@ function mesDeDatosEnVivo() {
   if (!state || !state.citas || !state.citas.length) return null;
   let max = null;
   state.citas.forEach(r => {
+    // Las pláticas de resultados agendadas a futuro (mes siguiente) no definen
+    // el mes en vivo: solo sirven para marcar como cumplida a la paciente.
+    if (isPlatica(r['Concepto'])) return;
     const f = fechaYMD(fechaDeFila(r));
     if (!f) return;
     const m = f.slice(0, 7);
@@ -3665,9 +3691,18 @@ const NOTES_KEY = 'fi_auditoria_notas';
 // que termina en "/exec".
 const NOTES_SYNC_URL = 'https://script.google.com/macros/s/AKfycbyOov0u7RaDrn9Rz_NP5O10Muk-mQIdGLnTSZoWVq4WzAY82ySdL-cxb-CYu_9M1ry_Kw/exec';
 
+// Notas fijas que se agregan desde el archivo (a petición de Maria Paula) para
+// meses ya cerrados, donde nadie puede editar notas desde el dashboard. Las
+// notas que existan en la nube/localStorage para la misma llave tienen
+// prioridad.
+const NOTAS_FIJAS = {
+  'incompleto|perez mateos, victor hugo|2026-10-30|': 'Sí tiene CP (agregado por Maria Paula)',
+};
 function getNotas() {
-  try { return JSON.parse(localStorage.getItem(NOTES_KEY) || '{}'); }
-  catch { return {}; }
+  let guardadas = {};
+  try { guardadas = JSON.parse(localStorage.getItem(NOTES_KEY) || '{}'); }
+  catch { guardadas = {}; }
+  return { ...NOTAS_FIJAS, ...guardadas };
 }
 
 function notaKey(tabla, paciente, fecha, concepto) {
