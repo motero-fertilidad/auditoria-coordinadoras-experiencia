@@ -3124,39 +3124,58 @@ function buildMonthlyDatasets() {
   // completos/actualizados, esos son los que se usan.
   const historial = getHistorialCombinado().slice().sort((a, b) =>
     new Date(b.fecha_guardado || 0) - new Date(a.fecha_guardado || 0));
-  const citasSeen = new Set();
-  const cargosSeen = new Set();
-  const expSeen = new Set();
+  // Dedup entre snapshots: una fila ya agregada por OTRO snapshot se omite.
+  // Para snapshots guardados desde nov-2026 las filas idénticas DENTRO del mismo
+  // snapshot (ej. dos cargos iguales el mismo día) se conservan, porque son
+  // cargos/citas reales distintos; los snapshots anteriores mantienen la regla
+  // vieja (sus números ya están cerrados y no deben cambiar).
+  const citasSeen = new Map();
+  const cargosSeen = new Map();
+  const expSeen = new Map();
   const meses = {};
   function ensureMes(m) {
     if (!meses[m]) meses[m] = { citas: [], cargos: [], sheetIT: [] };
     return meses[m];
   }
-  historial.forEach(snap => {
+  historial.forEach((snap, snapIdx) => {
     const s = snap.state || {};
+    const permiteDupMismoSnap = String(snap.fecha_guardado || '') >= '2026-11-01';
+    const yaVisto = (map, key) => map.has(key) && !(permiteDupMismoSnap && map.get(key) === snapIdx);
     const citas = [...(s.citas_gdl||[]), ...(s.citas_cdmx||[]), ...(s.citas_met||[])];
+    // Pláticas de resultados agendadas para un mes POSTERIOR al que cubre el
+    // snapshot (ej. el de octubre trae pláticas citadas en noviembre) son data
+    // que "nutre" al mes del snapshot, no un mes nuevo: se asignan al último
+    // mes con citas que no son pláticas.
+    let mesBaseSnap = null;
+    citas.forEach(r => {
+      if (isPlatica(r['Concepto'])) return;
+      const f = fechaYMD(r['Fecha']);
+      if (f && (!mesBaseSnap || f.slice(0,7) > mesBaseSnap)) mesBaseSnap = f.slice(0,7);
+    });
     citas.forEach(r => {
       const m = fechaYMD(r['Fecha']);
       if (!m) return;
       const key = rowKeyDedup('citas', r['Apellidos, Nombre'], m, r['Concepto']);
-      if (citasSeen.has(key)) return;
-      citasSeen.add(key);
-      ensureMes(m.slice(0,7)).citas.push(r);
+      if (yaVisto(citasSeen, key)) return;
+      citasSeen.set(key, snapIdx);
+      let mesFila = m.slice(0,7);
+      if (mesBaseSnap && isPlatica(r['Concepto']) && mesFila > mesBaseSnap) mesFila = mesBaseSnap;
+      ensureMes(mesFila).citas.push(r);
     });
     (s.cargos||[]).forEach(r => {
       const m = fechaYMD(r['F. Cargo']);
       if (!m) return;
       const key = rowKeyDedup('cargos', r['Historia'], m, r['Nombre Prod.']) + '|' + (r['Tt Venta + IVA']||r['Total Venta']||'');
-      if (cargosSeen.has(key)) return;
-      cargosSeen.add(key);
+      if (yaVisto(cargosSeen, key)) return;
+      cargosSeen.set(key, snapIdx);
       ensureMes(m.slice(0,7)).cargos.push(r);
     });
     (s.sheetIT||[]).forEach(r => {
       const m = fechaYMD(r['dia_cita']);
       if (!m) return;
       const key = rowKeyDedup('exp', r['paciente'], m, r['servicio']);
-      if (expSeen.has(key)) return;
-      expSeen.add(key);
+      if (yaVisto(expSeen, key)) return;
+      expSeen.set(key, snapIdx);
       ensureMes(m.slice(0,7)).sheetIT.push(r);
     });
   });
