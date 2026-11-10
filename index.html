@@ -453,22 +453,18 @@
     <p style="font-size:12px;color:var(--muted);margin:0 0 16px;" id="evol-info"></p>
     <div class="section">
       <div class="sec-head"><div class="sec-title">Plática de resultados · % cumplida por mes</div></div>
-      <div style="height:220px;margin-bottom:14px;"><canvas id="chart-evol-platica"></canvas></div>
       <div id="tabla-evol-platica"></div>
     </div>
     <div class="section" style="margin-top:20px;">
       <div class="sec-head"><div class="sec-title">Administrativo · % expediente completo por mes</div></div>
-      <div style="height:220px;margin-bottom:14px;"><canvas id="chart-evol-administrativo"></canvas></div>
       <div id="tabla-evol-administrativo"></div>
     </div>
     <div class="section" style="margin-top:20px;">
       <div class="sec-head"><div class="sec-title">Conversión por clínica · % primeras veces → captura ovular por mes</div></div>
-      <div style="height:220px;margin-bottom:14px;"><canvas id="chart-evol-conversion"></canvas></div>
       <div id="tabla-evol-conversion"></div>
     </div>
     <div class="section" style="margin-top:20px;">
       <div class="sec-head"><div class="sec-title">Add-ons · vendido (MXN) por mes</div></div>
-      <div style="height:220px;margin-bottom:14px;"><canvas id="chart-evol-addons"></canvas></div>
       <div id="tabla-evol-addons"></div>
     </div>
   </div>
@@ -3522,14 +3518,7 @@ function renderEvolucion() {
   renderTablaEvolucion('tabla-evol-addons', meses, data.addons, celdaAddons, undefined, undefined,
     (m, v) => sumTotalMes(v, ['monto', 'count']));
 
-  renderGraficaEvolucion('chart-evol-platica', meses, data.platica,
-    v => v.total ? Math.round(v.num / v.total * 100) : null, COORD_LIST, v => v + '%');
-  renderGraficaEvolucion('chart-evol-administrativo', meses, data.administrativo,
-    v => v.total ? Math.round(v.num / v.total * 100) : null, COORD_LIST, v => v + '%');
-  renderGraficaEvolucion('chart-evol-conversion', meses, data.conversion,
-    v => v.pv ? Math.round(v.cap / v.pv * 100) : null, CLINICAS_FISICAS.map(g => g.label), v => v + '%');
-  renderGraficaEvolucion('chart-evol-addons', meses, data.addons,
-    v => Math.round(v.monto), COORD_LIST, v => '$' + Math.round(v).toLocaleString('es-MX'));
+  // (Las gráficas de línea se quitaron a petición; solo quedan las tablas.)
 
   const totalSnapshots = getHistorialCombinado().length;
   const info = document.getElementById('evol-info');
