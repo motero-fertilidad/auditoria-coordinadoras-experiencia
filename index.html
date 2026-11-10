@@ -614,6 +614,16 @@ const REASIGNACIONES_CDMX = [
       'jaime antonio hidalgo carrera':null,
     },
   },
+  // 1 de noviembre de 2026: entra Isabel como coordinadora del Dr. Giovanni
+  // (antes Ana). Ana se queda solo con la Dra. Eugenia. Octubre y anteriores
+  // no cambian.
+  {
+    desde: '2026-11-01',
+    doctores: {
+      'giovanni lopez salamanca':     'Isabel',
+      'giovanni lópez salamanca':     'Isabel',
+    },
+  },
 ];
 // Devuelve el mapa doctor→coordinadora de CDMX vigente en una fecha dada.
 // Sin fecha (o fecha ilegible) se usa el mapa base, el histórico.
@@ -646,7 +656,7 @@ function mapaMET(fecha) {
   return mapa;
 }
 
-const COORD_LIST = ['Viviana','Mariana','Reyna','Jimena','Lucy','Sharon','Jacqueline','Alondra','Yanelli','Araceli','Eva','Ana','Emilia'];
+const COORD_LIST = ['Viviana','Mariana','Reyna','Jimena','Lucy','Sharon','Jacqueline','Alondra','Yanelli','Araceli','Eva','Ana','Emilia','Isabel'];
 
 // Coordinadoras que ya salieron del equipo (Lucy, Mariana y Sharon, a partir
 // de octubre 2026). Se quitan de los botones de filtro, pero se SIGUEN
@@ -672,7 +682,7 @@ const FILTRO_OCULTO_POR_PANEL = {
 // de todos los conteos (ver esSubrogacion() y sus usos).
 const CLINIC_GROUPS = [
   { label: 'GDL',  coords: ['Viviana', 'Mariana', 'Araceli', 'Emilia'] },
-  { label: 'CDMX', coords: ['Sharon', 'Reyna', 'Lucy', 'Jimena', 'Jacqueline', 'Eva', 'Ana'] },
+  { label: 'CDMX', coords: ['Sharon', 'Reyna', 'Lucy', 'Jimena', 'Jacqueline', 'Eva', 'Ana', 'Isabel'] },
   { label: 'MTP',  coords: ['Yanelli', 'Alondra'] },
 ];
 
@@ -1851,6 +1861,9 @@ function computeAddonsList(cargos, citas) {
     if (isAddonExcepcion(r['Concepto']) || isAddonExcepcion(r['Nombre Prod.'])) {
       return;
     }
+    // Doctor externo marcado "(EX)" en Profesional / Profesional Historia (ej.
+    // "Jorge Michel (EX)"): no se incluye en este dashboard, sea el servicio que sea.
+    if (isAddonExcepcion(r['Profesional']) || isAddonExcepcion(r['Profesional Historia'])) return;
     // Pacientes externos: su donación de esperma LAFER no es add-on de ninguna
     // coordinadora (a petición).
     if (ADDON_DONACION_EXTERNOS.includes(normName(name)) && combined.includes('lafer')) return;
@@ -2107,6 +2120,7 @@ const COORD_MAP_SHEET_PALABRA = {
   'eva': 'Eva',
   'ana': 'Ana',
   'emilia': 'Emilia',
+  'isabel': 'Isabel',
 };
 // Excluded: Externo, Híbrido, Valeria, Subrogación (se excluye del todo, ver esSubrogacion())
 
