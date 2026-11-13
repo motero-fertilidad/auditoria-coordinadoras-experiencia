@@ -945,6 +945,12 @@ function getCoord(row, cityOverride) {
   if (profAlias) return profAlias;
   if (usuarioAlias) return usuarioAlias;
 
+  // Toda paciente/cita de la Dra. Sharey Vazquez es de Emilia (desde el
+  // 5-oct-2026), aunque la cita la haga enfermería u otro profesional y
+  // Sharey solo aparezca como doctora de la historia.
+  const fSh = fmtDate(fecha);
+  if (fSh >= '2026-10-05' && normProf(row['Profesional Historia'] || '').includes('sharey vazquez')) return 'Emilia';
+
   return null;
 }
 
