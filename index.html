@@ -236,6 +236,7 @@
   <div class="tab"        id="tab-addons"     onclick="showTab('addons')">Add-ons</div>
   <div class="tab"        id="tab-experiencia"onclick="showTab('experiencia')">Administrativo</div>
   <div class="tab"        id="tab-platica"    onclick="showTab('platica')">Plática de Resultados</div>
+  <div class="tab"        id="tab-cotizaciones" onclick="showTab('cotizaciones')">Cotizaciones</div>
   <div class="tab"        id="tab-evolucion"  onclick="showTab('evolucion')">Evolución mensual</div>
 </div>
 
@@ -443,7 +444,39 @@
   </div>
 </div>
 
-<!-- PANEL: CARGOS -->
+<!-- PANEL: COTIZACIONES -->
+<div class="panel" id="panel-cotizaciones">
+  <div class="loading-state" id="loading-cotizaciones"><h2>Cotizaciones</h2><p>Cargando auditoría de cotizaciones...</p></div>
+  <div id="content-cotizaciones" style="display:none;">
+    <div class="filter-bar" id="filter-cotizaciones">
+      <label>Coordinadora:</label>
+    </div>
+    <p style="font-size:12px;color:var(--muted);margin:0 0 14px;" id="cot-info"></p>
+    <div class="kpi-grid">
+      <div class="kpi-card k-neutral"><div class="kpi-label">Primeras veces auditadas</div><div class="kpi-num" id="cot-total">—</div><div class="kpi-sub">Fertilidad · CDMX y GDL · citas Terminadas</div></div>
+      <div class="kpi-card k-blue"><div class="kpi-label">Con cotización</div><div class="kpi-num" id="cot-con">—</div><div class="kpi-sub">En HubSpot o enviada por Leona</div></div>
+      <div class="kpi-card k-amber"><div class="kpi-label">Formato nuevo</div><div class="kpi-num" id="cot-nuevo">—</div><div class="kpi-sub">Plantilla nueva de HubSpot</div></div>
+      <div class="kpi-card k-amber"><div class="kpi-label">Mismo día</div><div class="kpi-num" id="cot-dia">—</div><div class="kpi-sub">Cotizada el día de la consulta</div></div>
+      <div class="kpi-card k-green"><div class="kpi-label">Cumplen todo</div><div class="kpi-num" id="cot-ok">—</div><div class="kpi-sub">Formato nuevo + mismo día</div></div>
+    </div>
+    <div class="section">
+      <div class="sec-head"><div class="sec-title">Por coordinadora</div></div>
+      <div class="coord-grid" id="coord-grid-cot"></div>
+    </div>
+    <div class="section">
+      <div class="sec-head"><div class="sec-title">Detalle por paciente</div></div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Fecha consulta</th><th>Paciente</th><th>Sede</th><th>Consulta</th><th>Coordinadora</th><th>Plantilla</th><th>Cotizada</th><th>Resultado</th></tr></thead>
+        <tbody id="tbody-cotizaciones"></tbody>
+      </table></div>
+    </div>
+    <p style="font-size:11px;color:var(--muted);margin-top:14px;line-height:1.5;">
+      Reglas: cuentan las primeras veces de fertilidad (Fertility check up mujeres/parejas, Consulta primera vez, online, online gratis y Check up integral) con estado Terminada, en CDMX y GDL, sin (EX). Formato nuevo = plantilla "Nueva Cotización FI_2026", "Cotización FI estudios/medicamentos" o "Cotización FI seguimiento". Mismo día = fecha de publicación igual a la fecha de la consulta. Si no hay cotización en HubSpot se revisa el chat de Leona.
+    </p>
+  </div>
+</div>
+
+<!-- PANEL: EVOLUCIÓN -->
 <div class="panel" id="panel-evolucion">
   <div class="loading-state" id="loading-evolucion">
     <h2>Evolución mensual</h2>
@@ -679,6 +712,7 @@ const FILTRO_OCULTO_POR_PANEL = {
   addons:      new Set(['Yanelli']),
   platica:     new Set(['Yanelli']),
   experiencia: new Set(['Alondra']),
+  cotizaciones: new Set(['Alondra','Yanelli']),
 };
 
 // Agrupación de coordinadoras por clínica (para filtros y vista de Conversión)
@@ -728,11 +762,11 @@ function coordClinicGroup(coord) {
 }
 
 // activeFilters: conversion stores a clinic label (or null), others store a coord name (or null)
-const activeFilters = { conversion: null, addons: null, experiencia: null, platica: null, cargos: null };
+const activeFilters = { conversion: null, addons: null, experiencia: null, platica: null, cargos: null, cotizaciones: null };
 
 function initFilters() {
   // Conversion has its own hardcoded clinic buttons — skip it here
-  ['addons','experiencia','platica'].forEach(panel => {
+  ['addons','experiencia','platica','cotizaciones'].forEach(panel => {
     const bar = document.getElementById(`filter-${panel}`);
     if (!bar) return;
     bar.innerHTML = '';
@@ -777,6 +811,7 @@ function setFilter(panel, value, clickedBtn) {
   if (panel === 'addons') renderAddons();
   if (panel === 'experiencia') renderExperiencia();
   if (panel === 'platica') renderPlatica();
+  if (panel === 'cotizaciones') renderCotizaciones();
 }
 
 function filterByCoord(rows, panel) {
@@ -3564,6 +3599,128 @@ function showTab(id) {
   document.getElementById('tab-'+id).classList.add('active');
   document.getElementById('panel-'+id).classList.add('active');
   if (id === 'evolucion') renderEvolucion();
+  if (id === 'cotizaciones') renderCotizaciones();
+}
+
+
+// ─── COTIZACIONES (auditoría de cotizaciones de primera vez) ─────────────────
+// Los datos viven en cotizaciones.json (se genera revisando VRepro + HubSpot +
+// Leona; ver auditoría). La coordinadora se calcula aquí con getCoord, igual
+// que en el resto del dashboard, a partir del doctor de la consulta.
+const PLANTILLAS_COT_NUEVAS = ['nueva cotizacion fi_2026', 'cotizacion fi estudios/medicamentos', 'cotizacion fi seguimiento'];
+let COTIZACIONES = { actualizado: '', desde: '', registros: [] };
+const COTIZACIONES_EMBEBIDAS = {
+  "actualizado": "2026-11-17",
+  "desde": "2026-11-14",
+  "registros": [
+    {"fecha":"2026-11-14","paciente":"Martínez, Anna Berenice","sede":"CDMX","concepto":"Fertility Check up Mujeres","profesional":"Monica Olavarria","cotizacion":null,"leona":"sin_verificar"},
+    {"fecha":"2026-11-14","paciente":"Ocampo Gutiérrez de Velasco, Diego Antonio","sede":"CDMX","concepto":"Consulta primera vez","profesional":"Monica Olavarria","cotizacion":null,"leona":"sin_verificar"},
+    {"fecha":"2026-11-14","paciente":"Ramírez Limones, Mariana Itzel","sede":"CDMX","concepto":"Consulta primera vez","profesional":"Monica Olavarria","cotizacion":null,"leona":"sin_verificar"},
+    {"fecha":"2026-11-14","paciente":"Cuevas Negrete, Sara Edith","sede":"CDMX","concepto":"Fertility Check up Mujeres","profesional":"Jairo Hernando Pedraza Pinto","cotizacion":{"id":45724740767,"titulo":"TR - Sara Cuevas","plantilla":"Presupuesto Experiencia Ciudad de México","publicada":"2026-11-14","hora":"12:57","envio_por":"Eva Márquez"},"leona":"sin_verificar"},
+    {"fecha":"2026-11-14","paciente":"Sánchez Hernández, Claudia Gabriela","sede":"GDL","concepto":"Fertility Check up Parejas","profesional":"Sharey Vazquez","cotizacion":null,"leona":"sin_verificar"}
+  ]
+};
+
+function normPlantilla(s) {
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/\s+/g, ' ').replace(/_\s*/g, '_').trim();
+}
+function plantillaCotEsNueva(p) { return PLANTILLAS_COT_NUEVAS.includes(normPlantilla(p)); }
+
+function coordDeCotizacion(r) {
+  return getCoord({ 'Profesional': r.profesional, 'Profesional Historia': r.profesional,
+                    'Fecha': r.fecha, 'Concepto': r.concepto }, r.sede);
+}
+
+// Devuelve {key, label, cls, nuevo, mismoDia, cotizada}
+function estadoCotizacion(r) {
+  const c = r.cotizacion;
+  if (c) {
+    const nuevo = plantillaCotEsNueva(c.plantilla);
+    const mismoDia = fmtDate(c.publicada) === fmtDate(r.fecha);
+    if (nuevo && mismoDia) return { key: 'ok', label: 'Cumple', cls: 'pill-green', nuevo, mismoDia, cotizada: true };
+    if (nuevo)             return { key: 'tarde', label: 'Otro día', cls: 'pill-amber', nuevo, mismoDia, cotizada: true };
+    return { key: 'antiguo', label: mismoDia ? 'Formato antiguo' : 'Formato antiguo · otro día', cls: 'pill-red', nuevo, mismoDia, cotizada: true };
+  }
+  if (r.leona === 'enviada_mismo_dia') return { key: 'leona', label: 'Enviada por Leona (mismo día)', cls: 'pill-blue', nuevo: false, mismoDia: true, cotizada: true };
+  if (r.leona === 'enviada_otro_dia')  return { key: 'leona_tarde', label: 'Enviada por Leona (otro día)', cls: 'pill-amber', nuevo: false, mismoDia: false, cotizada: true };
+  if (r.leona === 'sin_verificar')     return { key: 'sin', label: 'Sin cotización en HubSpot · Leona por verificar', cls: 'pill-grey', nuevo: false, mismoDia: false, cotizada: false };
+  return { key: 'sin', label: 'Sin cotización', cls: 'pill-red', nuevo: false, mismoDia: false, cotizada: false };
+}
+
+async function cargarCotizaciones() {
+  try {
+    const res = await fetch('cotizaciones.json?' + Date.now(), { cache: 'no-cache' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const j = await res.json();
+    if (j && Array.isArray(j.registros)) COTIZACIONES = j;
+    else COTIZACIONES = COTIZACIONES_EMBEBIDAS;
+  } catch (e) {
+    COTIZACIONES = COTIZACIONES_EMBEBIDAS;
+  }
+  renderCotizaciones();
+}
+
+function renderCotizaciones() {
+  const regs = (COTIZACIONES && COTIZACIONES.registros) || [];
+  show('loading-cotizaciones', false);
+  show('content-cotizaciones', true);
+  const info = document.getElementById('cot-info');
+  if (info) info.textContent = 'Auditoría desde el ' + fmtDate(COTIZACIONES.desde) + (COTIZACIONES.actualizado ? ' · actualizada el ' + fmtDate(COTIZACIONES.actualizado) : '') + ' · Metepec aún no se audita.';
+
+  const filas = regs.map(r => ({ r, coord: coordDeCotizacion(r), est: estadoCotizacion(r) }));
+  const f = activeFilters['cotizaciones'];
+  const vis = f ? filas.filter(x => x.coord === f) : filas;
+
+  const n = vis.length;
+  const con = vis.filter(x => x.est.cotizada).length;
+  const nuevo = vis.filter(x => x.est.nuevo).length;
+  const dia = vis.filter(x => x.est.cotizada && x.est.mismoDia).length;
+  const ok = vis.filter(x => x.est.key === 'ok').length;
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  set('cot-total', n); set('cot-con', con); set('cot-nuevo', nuevo); set('cot-dia', dia); set('cot-ok', ok);
+
+  const porCoord = {};
+  filas.forEach(x => {
+    if (!x.coord) return;
+    const o = porCoord[x.coord] || (porCoord[x.coord] = { n: 0, con: 0, nuevo: 0, dia: 0, ok: 0 });
+    o.n++; if (x.est.cotizada) o.con++; if (x.est.nuevo) o.nuevo++;
+    if (x.est.cotizada && x.est.mismoDia) o.dia++; if (x.est.key === 'ok') o.ok++;
+  });
+  const grid = document.getElementById('coord-grid-cot');
+  if (grid) grid.innerHTML = COORD_LIST.filter(c => porCoord[c]).map(c => {
+    const o = porCoord[c];
+    const p = Math.round(o.ok / o.n * 100);
+    const cls = p >= 90 ? 'cc-green' : p >= 70 ? 'cc-amber' : 'cc-red';
+    const vc = cls === 'cc-green' ? 'v-green' : cls === 'cc-amber' ? 'v-amber' : 'v-red';
+    return `<div class="coord-card ${cls}">
+      <div class="coord-name">${c}</div>
+      <div class="coord-stat"><span class="cs-lbl">Primeras veces</span><span class="cs-val">${o.n}</span></div>
+      <div class="coord-stat"><span class="cs-lbl">Con cotización</span><span class="cs-val">${o.con}</span></div>
+      <div class="coord-stat"><span class="cs-lbl">Formato nuevo</span><span class="cs-val">${o.nuevo}</span></div>
+      <div class="coord-stat"><span class="cs-lbl">Mismo día</span><span class="cs-val">${o.dia}</span></div>
+      <div class="coord-stat"><span class="cs-lbl">% Cumplen todo</span><span class="cs-val ${vc}">${p}%</span></div>
+    </div>`;
+  }).join('');
+
+  const tb = document.getElementById('tbody-cotizaciones');
+  if (tb) tb.innerHTML = vis.length === 0
+    ? '<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px;">Sin primeras veces auditadas todavía</td></tr>'
+    : vis.slice().sort((a, b) => fmtDate(b.r.fecha).localeCompare(fmtDate(a.r.fecha)) || a.r.paciente.localeCompare(b.r.paciente)).map(x => {
+        const c = x.r.cotizacion;
+        const tag = x.r.sede === 'GDL' ? 'tag-gdl' : 'tag-cdmx';
+        const cotizada = c ? `${fmtDate(c.publicada)}${c.hora ? ' · ' + c.hora : ''}${c.envio_por ? '<br><span style="color:var(--muted);font-size:10px;">' + c.envio_por + '</span>' : ''}` : '—';
+        return `<tr>
+          <td>${fmtDate(x.r.fecha)}</td>
+          <td>${x.r.paciente}</td>
+          <td><span class="tag ${tag}">${x.r.sede}</span></td>
+          <td>${x.r.concepto}</td>
+          <td>${x.coord || '—'}</td>
+          <td>${c ? c.plantilla : '—'}</td>
+          <td>${cotizada}</td>
+          <td><span class="pill ${x.est.cls}">${x.est.label}</span></td>
+        </tr>`;
+      }).join('');
 }
 
 // ─── AUTO-LOAD FROM GITHUB ────────────────────────────────────────────────────
@@ -3710,6 +3867,7 @@ window.addEventListener('load', () => {
   initFilters();
   autoLoadFromGitHub().then(() => sincronizarNotasDesdeNube(false));
   autoLoadHistorialFromGitHub();
+  cargarCotizaciones();
 });
 
 // ─── HISTORIAL ────────────────────────────────────────────────────────────────
