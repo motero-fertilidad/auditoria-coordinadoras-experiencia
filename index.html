@@ -466,12 +466,12 @@
     <div class="section">
       <div class="sec-head"><div class="sec-title">Detalle por paciente</div></div>
       <div class="tbl-wrap"><table>
-        <thead><tr><th>Fecha consulta</th><th>Paciente</th><th>Sede</th><th>Consulta</th><th>Coordinadora</th><th>Plantilla</th><th>Cotizada</th><th>Resultado</th></tr></thead>
+        <thead><tr><th>Fecha consulta</th><th>Paciente</th><th>Sede</th><th>Consulta</th><th>Coordinadora</th><th>Cotizada</th><th>Resultado</th><th>Notas</th></tr></thead>
         <tbody id="tbody-cotizaciones"></tbody>
       </table></div>
     </div>
     <p style="font-size:11px;color:var(--muted);margin-top:14px;line-height:1.5;">
-      Reglas: cuentan las primeras veces de fertilidad (Fertility check up mujeres/parejas, Consulta primera vez, online, online gratis y Check up integral) con estado Terminada, en CDMX y GDL, sin (EX). Formato nuevo = plantilla "Nueva Cotización FI_2026", "Cotización FI estudios/medicamentos" o "Cotización FI seguimiento". Mismo día = fecha de publicación igual a la fecha de la consulta. Si no hay cotización en HubSpot se revisa el chat de Leona.
+      Reglas: cuentan las primeras veces de fertilidad (Fertility check up mujeres/parejas, Consulta primera vez, online, online gratis y Check up integral) con estado Terminada, en CDMX y GDL, sin (EX). Formato nuevo = plantilla "Nueva Cotización FI_2026", "Cotización FI estudios/medicamentos" o "Cotización FI seguimiento". Mismo día = fecha de publicación igual a la fecha de la consulta. Si no hay cotización en HubSpot se revisa el chat de Leona. Resultados: Cumple, Formato antiguo o No creada el mismo día.
     </p>
   </div>
 </div>
@@ -3639,13 +3639,12 @@ function estadoCotizacion(r) {
     const nuevo = plantillaCotEsNueva(c.plantilla);
     const mismoDia = fmtDate(c.publicada) === fmtDate(r.fecha);
     if (nuevo && mismoDia) return { key: 'ok', label: 'Cumple', cls: 'pill-green', nuevo, mismoDia, cotizada: true };
-    if (nuevo)             return { key: 'tarde', label: 'Otro día', cls: 'pill-amber', nuevo, mismoDia, cotizada: true };
-    return { key: 'antiguo', label: mismoDia ? 'Formato antiguo' : 'Formato antiguo · otro día', cls: 'pill-red', nuevo, mismoDia, cotizada: true };
+    if (nuevo)             return { key: 'tarde', label: 'No creada el mismo día', cls: 'pill-red', nuevo, mismoDia, cotizada: true };
+    return { key: 'antiguo', label: 'Formato antiguo', cls: 'pill-red', nuevo, mismoDia, cotizada: true };
   }
   if (r.leona === 'enviada_mismo_dia') return { key: 'leona', label: 'Enviada por Leona (mismo día)', cls: 'pill-blue', nuevo: false, mismoDia: true, cotizada: true };
-  if (r.leona === 'enviada_otro_dia')  return { key: 'leona_tarde', label: 'Enviada por Leona (otro día)', cls: 'pill-amber', nuevo: false, mismoDia: false, cotizada: true };
-  if (r.leona === 'sin_verificar')     return { key: 'sin', label: 'Sin cotización en HubSpot · Leona por verificar', cls: 'pill-grey', nuevo: false, mismoDia: false, cotizada: false };
-  return { key: 'sin', label: 'Sin cotización', cls: 'pill-red', nuevo: false, mismoDia: false, cotizada: false };
+  if (r.leona === 'enviada_otro_dia')  return { key: 'leona_tarde', label: 'No creada el mismo día', cls: 'pill-red', nuevo: false, mismoDia: false, cotizada: true };
+  return { key: 'sin', label: 'No creada el mismo día', cls: 'pill-red', nuevo: false, mismoDia: false, cotizada: false };
 }
 
 async function cargarCotizaciones() {
@@ -3716,9 +3715,9 @@ function renderCotizaciones() {
           <td><span class="tag ${tag}">${x.r.sede}</span></td>
           <td>${x.r.concepto}</td>
           <td>${x.coord || '—'}</td>
-          <td>${c ? c.plantilla : '—'}</td>
           <td>${cotizada}</td>
           <td><span class="pill ${x.est.cls}">${x.est.label}</span></td>
+          ${notaCellHTML('cotizaciones', x.r.paciente, fmtDate(x.r.fecha), x.r.concepto)}
         </tr>`;
       }).join('');
 }
