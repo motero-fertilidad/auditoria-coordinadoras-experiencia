@@ -677,6 +677,7 @@ function mapaCDMX(fecha) {
 // METEPEC
 const DOCTOR_COORD_MET = {
   'guadalupe nolazco': 'Alondra',
+  'david alejandro laguna': 'Alondra',
 };
 // Desde el 1 de octubre de 2026 la coordinadora de experiencia de Metepec es
 // Yanelli (ya no Alondra). Antes de esa fecha sigue contando Alondra.
@@ -1242,7 +1243,7 @@ const PROF_CDMX = ['alma victoria villarreal barranca','giovanni lopez salamanca
   'giovanni lópez salamanca','ruben gonzalez ruiz','eugenia moran orozco','eugenia morán orozco',
   'jaime antonio hidalgo carrera','armando miguel roque sanchez','jairo hernando pedraza pinto',
   'miranda lucia moran morales','miranda lucía morán morales','monica olavarria','mónica olavarria'];
-const PROF_MET = ['guadalupe nolazco'];
+const PROF_MET = ['guadalupe nolazco','david alejandro laguna'];
 const ALL_INTERNAL_PROF = [...PROF_GDL, ...PROF_CDMX, ...PROF_MET];
 
 // Returns true if the row should be EXCLUDED
@@ -2321,7 +2322,7 @@ function resolveCoordExp(row, citasRowsByName) {
   // sheet) se audita a nombre de Yanelli. En el resto de pestañas sigue Alondra.
   if (fDia && fDia !== '—' && fDia >= ADMIN_DOCTOR_OVERRIDE_DESDE) {
     const dr2 = normProf(row['doctor_nombre'] || '');
-    if (cSheet === 'Alondra' || (dr2 && dr2.includes('nolazco'))) return 'Yanelli';
+    if (cSheet === 'Alondra' || (dr2 && (dr2.includes('nolazco') || dr2.includes('laguna')))) return 'Yanelli';
   }
   // Coordinadoras que ya salieron no reciben pacientes de octubre en adelante.
   if (cSheet && COORD_INACTIVAS.has(cSheet) && fDia && fDia >= ADMIN_DOCTOR_OVERRIDE_DESDE) return null;
@@ -3610,14 +3611,179 @@ function showTab(id) {
 const PLANTILLAS_COT_NUEVAS = ['nueva cotizacion fi_2026', 'cotizacion fi estudios/medicamentos', 'cotizacion fi seguimiento'];
 let COTIZACIONES = { actualizado: '', desde: '', registros: [] };
 const COTIZACIONES_EMBEBIDAS = {
-  "actualizado": "2026-11-17",
-  "desde": "2026-11-14",
+  "actualizado": "2026-11-18",
+  "desde": "2026-11-17",
   "registros": [
-    {"fecha":"2026-11-14","paciente":"Martínez, Anna Berenice","sede":"CDMX","concepto":"Fertility Check up Mujeres","profesional":"Monica Olavarria","cotizacion":null,"leona":"sin_verificar"},
-    {"fecha":"2026-11-14","paciente":"Ocampo Gutiérrez de Velasco, Diego Antonio","sede":"CDMX","concepto":"Consulta primera vez","profesional":"Monica Olavarria","cotizacion":null,"leona":"sin_verificar"},
-    {"fecha":"2026-11-14","paciente":"Ramírez Limones, Mariana Itzel","sede":"CDMX","concepto":"Consulta primera vez","profesional":"Monica Olavarria","cotizacion":null,"leona":"sin_verificar"},
-    {"fecha":"2026-11-14","paciente":"Cuevas Negrete, Sara Edith","sede":"CDMX","concepto":"Fertility Check up Mujeres","profesional":"Jairo Hernando Pedraza Pinto","cotizacion":{"id":45724740767,"titulo":"TR - Sara Cuevas","plantilla":"Presupuesto Experiencia Ciudad de México","publicada":"2026-11-14","hora":"12:57","envio_por":"Eva Márquez"},"leona":"sin_verificar"},
-    {"fecha":"2026-11-14","paciente":"Sánchez Hernández, Claudia Gabriela","sede":"GDL","concepto":"Fertility Check up Parejas","profesional":"Sharey Vazquez","cotizacion":null,"leona":"sin_verificar"}
+    {
+      "fecha": "2026-11-17",
+      "paciente": "Minnis, Leslie Catherine",
+      "sede": "CDMX",
+      "concepto": "Consulta primera vez online gratis",
+      "profesional": "Eugenia Morán Orozco",
+      "cotizacion": {
+        "id": 45760946286,
+        "titulo": "Leslie Minnis",
+        "plantilla": "Nueva Cotización FI_2026",
+        "publicada": "2026-11-17",
+        "hora": "18:44",
+        "envio_por": "Ana Martinez"
+      },
+      "leona": "sin_verificar"
+    },
+    {
+      "fecha": "2026-11-17",
+      "paciente": "Pianon, Michel",
+      "sede": "CDMX",
+      "concepto": "Consulta primera vez online",
+      "profesional": "Jairo Hernando Pedraza Pinto",
+      "cotizacion": null,
+      "leona": "sin_verificar"
+    },
+    {
+      "fecha": "2026-11-17",
+      "paciente": "Borges Guerrero, Yeniseiky",
+      "sede": "CDMX",
+      "concepto": "Consulta primera vez",
+      "profesional": "Miranda Lucía Morán Morales",
+      "cotizacion": {
+        "id": 45719062418,
+        "titulo": "FIV - Yeniseiky Borges Guerrero",
+        "plantilla": "Presupuesto Experiencia Ciudad de México",
+        "publicada": "2026-11-17",
+        "hora": "11:49",
+        "envio_por": "Dulce Jaqueline Sandoval Gutiérrez"
+      },
+      "leona": "sin_verificar"
+    },
+    {
+      "fecha": "2026-11-17",
+      "paciente": "Kong, Edni Darleny",
+      "sede": "CDMX",
+      "concepto": "Consulta primera vez online",
+      "profesional": "Giovanni López Salamanca",
+      "cotizacion": {
+        "id": 45752391252,
+        "titulo": "Edni Darleny Kong",
+        "plantilla": "Experience Quote Ciudad de México",
+        "publicada": "2026-11-17",
+        "hora": "13:51",
+        "envio_por": "Michelle Hernandez"
+      },
+      "leona": "sin_verificar"
+    },
+    {
+      "fecha": "2026-11-17",
+      "paciente": "McIvor Baker, Ellie",
+      "sede": "CDMX",
+      "concepto": "Consulta primera vez online",
+      "profesional": "Eugenia Morán Orozco",
+      "cotizacion": {
+        "id": 45803258198,
+        "titulo": "Ellie McIvor Baker",
+        "plantilla": "Nueva Cotización FI_2026",
+        "publicada": "2026-11-17",
+        "hora": "19:01",
+        "envio_por": "Michelle Hernandez"
+      },
+      "leona": "sin_verificar"
+    },
+    {
+      "fecha": "2026-11-17",
+      "paciente": "Rios Agramon, Zaida Judith",
+      "sede": "CDMX",
+      "concepto": "Fertility Check up Mujeres",
+      "profesional": "Miranda Lucía Morán Morales",
+      "cotizacion": null,
+      "leona": "sin_verificar"
+    },
+    {
+      "fecha": "2026-11-17",
+      "paciente": "Sahagún Bustamante, Daniela",
+      "sede": "CDMX",
+      "concepto": "Check up Integral",
+      "profesional": "Miranda Lucía Morán Morales",
+      "cotizacion": null,
+      "leona": "sin_verificar"
+    },
+    {
+      "fecha": "2026-11-17",
+      "paciente": "Orozco Escoba, Alberto",
+      "sede": "CDMX",
+      "concepto": "Consulta primera vez",
+      "profesional": "Armando Miguel Roque Sanchez",
+      "cotizacion": {
+        "id": 45760946103,
+        "titulo": "CDO - Alberto Orozco Escoba - 1",
+        "plantilla": "Presupuesto Experiencia Ciudad de México",
+        "publicada": "2026-11-17",
+        "hora": "17:36",
+        "envio_por": "Jimena Del Moral"
+      },
+      "leona": "sin_verificar"
+    },
+    {
+      "fecha": "2026-11-17",
+      "paciente": "Zúñiga Hernández, Luis Alain",
+      "sede": "CDMX",
+      "concepto": "Fertility Check up Parejas",
+      "profesional": "Miranda Lucía Morán Morales",
+      "cotizacion": null,
+      "leona": "sin_verificar"
+    },
+    {
+      "fecha": "2026-11-17",
+      "paciente": "Rodríguez Sánchez, Viviana",
+      "sede": "CDMX",
+      "concepto": "Consulta primera vez online",
+      "profesional": "Armando Miguel Roque Sanchez",
+      "cotizacion": null,
+      "leona": "sin_verificar"
+    },
+    {
+      "fecha": "2026-11-17",
+      "paciente": "Arredondo, Luisa Margarita",
+      "sede": "GDL",
+      "concepto": "Consulta primera vez",
+      "profesional": "Jorge Michel",
+      "cotizacion": null,
+      "leona": "sin_verificar"
+    },
+    {
+      "fecha": "2026-11-17",
+      "paciente": "Cordero Orozco, Hugo Alberto",
+      "sede": "GDL",
+      "concepto": "Consulta primera vez",
+      "profesional": "Carlos Parra",
+      "cotizacion": null,
+      "leona": "sin_verificar"
+    },
+    {
+      "fecha": "2026-11-17",
+      "paciente": "Tejeda, Sergio Daniel",
+      "sede": "GDL",
+      "concepto": "Fertility Check up Parejas",
+      "profesional": "Carlos Parra",
+      "cotizacion": null,
+      "leona": "sin_verificar"
+    },
+    {
+      "fecha": "2026-11-17",
+      "paciente": "López de Lara Ruiz Llaguno, Ximena",
+      "sede": "GDL",
+      "concepto": "Fertility Check up Parejas",
+      "profesional": "Carlos Parra",
+      "cotizacion": null,
+      "leona": "sin_verificar"
+    },
+    {
+      "fecha": "2026-11-17",
+      "paciente": "Diaz Castro, Belen",
+      "sede": "GDL",
+      "concepto": "Fertility Check up Parejas",
+      "profesional": "Diana Duran",
+      "cotizacion": null,
+      "leona": "sin_verificar"
+    }
   ]
 };
 
