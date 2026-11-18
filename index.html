@@ -459,7 +459,7 @@
       <div class="kpi-card k-amber"><div class="kpi-label">Mismo día</div><div class="kpi-num" id="cot-dia">—</div><div class="kpi-sub">Cotizada el día de la consulta</div></div>
       <div class="kpi-card k-green"><div class="kpi-label">Cumplen todo</div><div class="kpi-num" id="cot-ok">—</div><div class="kpi-sub">Formato nuevo + mismo día</div></div>
     </div>
-    <div class="section">
+    <div class="section" id="sec-cot-coord">
       <div class="sec-head"><div class="sec-title">Por coordinadora</div></div>
       <div class="coord-grid" id="coord-grid-cot"></div>
     </div>
@@ -3852,6 +3852,8 @@ function renderCotizaciones() {
     o.n++; if (x.est.cotizada) o.con++; if (x.est.nuevo) o.nuevo++;
     if (x.est.cotizada && x.est.mismoDia) o.dia++; if (x.est.key === 'ok') o.ok++;
   });
+  const secCoord = document.getElementById('sec-cot-coord');
+  if (secCoord) secCoord.style.display = f ? 'none' : '';
   const grid = document.getElementById('coord-grid-cot');
   if (grid) grid.innerHTML = COORD_LIST.filter(c => porCoord[c]).map(c => {
     const o = porCoord[c];
