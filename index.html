@@ -1256,6 +1256,13 @@ function isExternal(row) {
   const profField = isCaptura(row['Concepto']) ? 'Profesional Historia' : 'Profesional';
   const prof = normProf(row[profField] || '');
   if (!prof) return true;
+  // Médico marcado "(EX)" (ej. "Jorge Michel (EX)") = externo: no entra al
+  // dashboard. El mismo médico SIN "(EX)" es interno y sí cuenta. Regla vigente
+  // desde noviembre 2026; los meses cerrados se quedan como se vieron.
+  if (/\(ex\)/i.test(String(row[profField] || ''))) {
+    const f = fmtDate(fechaDeFila(row));
+    if (f && f !== '—' && f >= '2026-11-01') return true;
+  }
   return !ALL_INTERNAL_PROF.some(p => prof.includes(normProf(p)));
 }
 
