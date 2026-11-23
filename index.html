@@ -457,7 +457,7 @@
       <div class="kpi-card k-blue"><div class="kpi-label">Con cotización</div><div class="kpi-num" id="cot-con">—</div><div class="kpi-sub">En HubSpot o enviada por Leona</div></div>
       <div class="kpi-card k-amber"><div class="kpi-label">Formato nuevo</div><div class="kpi-num" id="cot-nuevo">—</div><div class="kpi-sub">Plantilla nueva de HubSpot</div></div>
       <div class="kpi-card k-amber"><div class="kpi-label">Mismo día</div><div class="kpi-num" id="cot-dia">—</div><div class="kpi-sub">Cotizada el día de la consulta</div></div>
-      <div class="kpi-card k-green"><div class="kpi-label">Cumplen todo</div><div class="kpi-num" id="cot-ok">—</div><div class="kpi-sub">Formato nuevo + mismo día</div></div>
+      <div class="kpi-card k-green"><div class="kpi-label">Cumplen todo</div><div class="kpi-num" id="cot-ok">—</div><div class="kpi-sub">Formato nuevo + mismo día, o revisadas con nota</div></div>
     </div>
     <div class="section" id="sec-cot-coord">
       <div class="sec-head"><div class="sec-title">Por coordinadora</div></div>
@@ -471,7 +471,7 @@
       </table></div>
     </div>
     <p style="font-size:11px;color:var(--muted);margin-top:14px;line-height:1.5;">
-      Reglas: cuentan las primeras veces de fertilidad (Fertility check up mujeres/parejas, Consulta primera vez, online, online gratis y Check up integral) con estado Terminada, en CDMX y GDL, sin (EX). Formato nuevo = plantilla "Nueva Cotización FI_2026", "Cotización FI estudios/medicamentos" o "Cotización FI seguimiento". Mismo día = fecha de publicación igual a la fecha de la consulta. Si no hay cotización en HubSpot se revisa el chat de Leona. Resultados: Cumple, Formato antiguo o No creada el mismo día.
+      Reglas: cuentan las primeras veces de fertilidad (Fertility check up mujeres/parejas, Consulta primera vez, online, online gratis y Check up integral) con estado Terminada, en CDMX y GDL, sin (EX). Formato nuevo = plantilla "Nueva Cotización FI_2026", "Cotización FI estudios/medicamentos" o "Cotización FI seguimiento". Mismo día = fecha de publicación igual a la fecha de la consulta. Si no hay cotización en HubSpot se revisa el chat de Leona. Resultados: Cumple, Formato antiguo, No creada el mismo día o Revisado. Si la fila tiene una nota (ej. "no se dio cotización"), pasa a Revisado y ya no cuenta como incumplimiento.
     </p>
   </div>
 </div>
@@ -4288,7 +4288,15 @@ function renderCotizaciones() {
   const info = document.getElementById('cot-info');
   if (info) info.textContent = 'Auditoría desde el ' + fmtDate(COTIZACIONES.desde) + (COTIZACIONES.actualizado ? ' · actualizada el ' + fmtDate(COTIZACIONES.actualizado) : '') + ' · Metepec aún no se audita.';
 
-  const filas = regs.map(r => ({ r, coord: coordDeCotizacion(r), est: estadoCotizacion(r) }));
+  // Si la fila tiene una nota (ej. "no se dio cotización"), se considera
+  // revisada: deja de contar como incumplimiento y su resultado pasa a "Revisado".
+  const _notas = getNotas();
+  const conNota = r => String(_notas[notaKey('cotizaciones', r.paciente, fmtDate(r.fecha), r.concepto)] || '').trim() !== '';
+  const filas = regs.map(r => {
+    let est = estadoCotizacion(r);
+    if (est.key !== 'ok' && conNota(r)) est = Object.assign({}, est, { key: 'revisado', label: 'Revisado', cls: 'pill-blue', revisado: true });
+    return { r, coord: coordDeCotizacion(r), est };
+  });
   const f = activeFilters['cotizaciones'];
   const vis = f ? filas.filter(x => x.coord === f) : filas;
 
@@ -4296,7 +4304,7 @@ function renderCotizaciones() {
   const con = vis.filter(x => x.est.cotizada).length;
   const nuevo = vis.filter(x => x.est.nuevo).length;
   const dia = vis.filter(x => x.est.cotizada && x.est.mismoDia).length;
-  const ok = vis.filter(x => x.est.key === 'ok').length;
+  const ok = vis.filter(x => x.est.key === 'ok' || x.est.revisado).length;
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
   set('cot-total', n); set('cot-con', con); set('cot-nuevo', nuevo); set('cot-dia', dia); set('cot-ok', ok);
 
@@ -4305,7 +4313,7 @@ function renderCotizaciones() {
     if (!x.coord) return;
     const o = porCoord[x.coord] || (porCoord[x.coord] = { n: 0, con: 0, nuevo: 0, dia: 0, ok: 0 });
     o.n++; if (x.est.cotizada) o.con++; if (x.est.nuevo) o.nuevo++;
-    if (x.est.cotizada && x.est.mismoDia) o.dia++; if (x.est.key === 'ok') o.ok++;
+    if (x.est.cotizada && x.est.mismoDia) o.dia++; if (x.est.key === 'ok' || x.est.revisado) o.ok++;
   });
   const secCoord = document.getElementById('sec-cot-coord');
   if (secCoord) secCoord.style.display = f ? 'none' : '';
@@ -4636,6 +4644,7 @@ try { migrarNotasPlatica(); } catch (e) {}
 function notaCambiada(key) {
   const tabla = String(key||'').split('|')[0];
   if (tabla === 'sincargo') return; // pestaña de Cargos retirada del dashboard
+  if (tabla === 'cotizaciones') { renderCotizaciones(); return; }
   if (tabla === 'incompleto') {
     if (state.sheetIT) renderExperiencia();
     return;
