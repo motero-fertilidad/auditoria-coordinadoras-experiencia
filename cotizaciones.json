@@ -619,6 +619,16 @@
       "profesional": "Miranda Lucía Morán Morales",
       "cotizacion": null,
       "leona": "sin_verificar"
+    },
+    {
+      "fecha": "2026-11-18",
+      "paciente": "Mora Archundia, Erandy Guadalupe",
+      "sede": "MET",
+      "concepto": "Fertility Check up Mujeres",
+      "profesional": "David Alejandro Laguna Pérez",
+      "cotizacion": null,
+      "leona": "sin_verificar"
     }
-  ]
+  ],
+  "desde_metepec": "2026-11-18 12:00"
 }
