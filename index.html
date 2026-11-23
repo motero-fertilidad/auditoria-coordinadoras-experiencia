@@ -457,7 +457,8 @@
       <div class="kpi-card k-blue"><div class="kpi-label">Con cotización</div><div class="kpi-num" id="cot-con">—</div><div class="kpi-sub">En HubSpot o enviada por Leona</div></div>
       <div class="kpi-card k-amber"><div class="kpi-label">Formato nuevo</div><div class="kpi-num" id="cot-nuevo">—</div><div class="kpi-sub">Plantilla nueva de HubSpot</div></div>
       <div class="kpi-card k-amber"><div class="kpi-label">Mismo día</div><div class="kpi-num" id="cot-dia">—</div><div class="kpi-sub">Cotizada el día de la consulta</div></div>
-      <div class="kpi-card k-green"><div class="kpi-label">Cumplen todo</div><div class="kpi-num" id="cot-ok">—</div><div class="kpi-sub">Formato nuevo + mismo día, o revisadas con nota</div></div>
+      <div class="kpi-card k-blue"><div class="kpi-label">Enviadas por Leona</div><div class="kpi-num" id="cot-leona">—</div><div class="kpi-sub">WhatsApp el mismo día (según la hoja)</div></div>
+      <div class="kpi-card k-green"><div class="kpi-label">Cumplen todo</div><div class="kpi-num" id="cot-ok">—</div><div class="kpi-sub">Creada el mismo día + enviada por Leona, o revisadas con nota</div></div>
       <div class="kpi-card k-amber"><div class="kpi-label">% Cumplimiento</div><div class="kpi-num" id="cot-pct">—</div><div class="kpi-sub">Cumplen todo / primeras veces</div></div>
     </div>
     <div class="section" id="sec-cot-coord">
@@ -472,7 +473,7 @@
       </table></div>
     </div>
     <p style="font-size:11px;color:var(--muted);margin-top:14px;line-height:1.5;">
-      Reglas: cuentan las primeras veces de fertilidad (Fertility check up mujeres/parejas, Consulta primera vez, online, online gratis y Check up integral) con estado Terminada, en CDMX y GDL (y Metepec desde el miércoles 18-nov a las 12:00), sin (EX). Formato nuevo = plantilla "Nueva Cotización FI_2026", "Cotización FI estudios/medicamentos" o "Cotización FI seguimiento". Mismo día = fecha de publicación igual a la fecha de la consulta. Si no hay cotización en HubSpot se revisa el chat de Leona. Resultados: Cumple, Formato antiguo, No creada el mismo día o Revisado. Si la fila tiene una nota (ej. "no se dio cotización"), pasa a Revisado y ya no cuenta como incumplimiento.
+      Reglas: cuentan las primeras veces de fertilidad (Fertility check up mujeres/parejas, Consulta primera vez, online, online gratis y Check up integral) con estado Terminada, en CDMX y GDL (y Metepec desde el miércoles 18-nov a las 12:00), sin (EX). Formato nuevo = plantilla "Nueva Cotización FI_2026", "Cotización FI estudios/medicamentos" o "Cotización FI seguimiento". Mismo día = fecha de publicación igual a la fecha de la consulta. Además la cotización debe haberse enviado por Leona (WhatsApp) el mismo día; los datos vienen de la hoja «Cotizaciones» de datos.xlsx. Resultados: Cumple, Formato antiguo, No creada el mismo día, No enviada por Leona, Pendiente Leona o Revisado. Si la fila tiene una nota (ej. "no se dio cotización"), pasa a Revisado y ya no cuenta como incumplimiento.
     </p>
   </div>
 </div>
@@ -4265,8 +4266,22 @@ function coordDeCotizacion(r) {
 }
 
 // Devuelve {key, label, cls, nuevo, mismoDia, cotizada}
+// Cumple = cotización creada (publicada) el mismo día de la consulta, en
+// plantilla nueva cuando se conoce, Y enviada por Leona (WhatsApp) ese mismo día.
 function estadoCotizacion(r) {
   const c = r.cotizacion;
+  if (r.hoja) {
+    if (!c) return { key: 'sin', label: 'No creada el mismo día', cls: 'pill-red', nuevo: false, mismoDia: false, cotizada: false, leona: false };
+    const nuevo = c.plantilla ? plantillaCotEsNueva(c.plantilla) : true;
+    const mismoDia = fmtDate(c.publicada) === fmtDate(r.fecha);
+    const ln = r.leonaEstado;
+    const base = { nuevo, mismoDia, cotizada: true, leona: ln === 'ok' };
+    if (!mismoDia) return Object.assign({ key: 'tarde', label: 'No creada el mismo día', cls: 'pill-red' }, base);
+    if (!nuevo)    return Object.assign({ key: 'antiguo', label: 'Formato antiguo', cls: 'pill-red' }, base);
+    if (ln === 'ok')  return Object.assign({ key: 'ok', label: 'Cumple', cls: 'pill-green' }, base);
+    if (ln === 'sin') return Object.assign({ key: 'noleona', label: 'No enviada por Leona', cls: 'pill-red' }, base);
+    return Object.assign({ key: 'pendleona', label: 'Pendiente Leona', cls: 'pill-amber' }, base);
+  }
   if (c) {
     const nuevo = plantillaCotEsNueva(c.plantilla);
     const mismoDia = fmtDate(c.publicada) === fmtDate(r.fecha);
@@ -4277,6 +4292,49 @@ function estadoCotizacion(r) {
   if (r.leona === 'enviada_mismo_dia') return { key: 'leona', label: 'Enviada por Leona (mismo día)', cls: 'pill-blue', nuevo: false, mismoDia: true, cotizada: true };
   if (r.leona === 'enviada_otro_dia')  return { key: 'leona_tarde', label: 'No creada el mismo día', cls: 'pill-red', nuevo: false, mismoDia: false, cotizada: true };
   return { key: 'sin', label: 'No creada el mismo día', cls: 'pill-red', nuevo: false, mismoDia: false, cotizada: false };
+}
+
+// Convierte las filas de la hoja "Cotizaciones" de datos.xlsx al formato que
+// usa la pestaña. Metepec (MTP) se audita desde el 18-nov-2026 a las 12:00.
+// La plantilla (y borradores ya publicados después) se toma de cotizaciones.json
+// cuando existe ese paciente/fecha; si no, no se evalúa el formato.
+function normHoraCot(v) {
+  if (v === null || v === undefined || v === '') return '';
+  if (typeof v === 'number') { const m = Math.round(v * 24 * 60); return String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); }
+  const m = String(v).match(/(\d{1,2}):(\d{2})/);
+  return m ? m[1].padStart(2, '0') + ':' + m[2] : String(v);
+}
+function regsDesdeHoja(rows) {
+  const jr = ((COTIZACIONES && COTIZACIONES.registros) || COTIZACIONES_EMBEBIDAS.registros || []);
+  const idx = {};
+  jr.forEach(j => { idx[normName(j.paciente) + '|' + fmtDate(j.fecha)] = j; });
+  const out = [];
+  rows.forEach(r => {
+    const pac = String(r.paciente || '').trim();
+    if (!pac) return;
+    const fecha = fmtDate(r.fecha_consulta);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) return;
+    const s0 = String(r.sede || '').trim().toUpperCase();
+    const sede = (s0 === 'MTP' || s0 === 'MET' || s0 === 'METEPEC') ? 'MET' : s0;
+    const hora = normHoraCot(r.hora);
+    if (sede === 'MET' && (fecha + ' ' + (hora || '00:00')) < '2026-11-18 12:00') return;
+    const j = idx[normName(pac) + '|' + fecha];
+    const estado = String(r.estado_hubspot || '').trim().toLowerCase();
+    const creada = String(r.cotizacion_creada_hubspot || '').trim();
+    let cot = null;
+    if (j && j.cotizacion) {
+      cot = j.cotizacion;                       // cotización publicada confirmada en HubSpot
+    } else if (estado === 'creada' && creada) {
+      cot = { titulo: r.titulo_cotizacion || '', plantilla: '', publicada: fmtDate(creada), hora: normHoraCot(creada.slice(11)) };
+    }
+    const ce = normName(r.cumple_envio_mismo_dia);
+    const leonaEstado = ce === 'si' ? 'ok' : (ce === 'sin evidencia' || ce === 'no') ? 'sin' : (ce.startsWith('n/a') ? 'na' : 'pendiente');
+    out.push({ hoja: true, fecha, paciente: pac, sede, concepto: String(r.tipo_consulta || '').trim(),
+      profesional: String(r.profesional || '').trim(), cotizacion: cot, leonaEstado,
+      leonaEnvio: String(r.envio_leona || '').trim(), leonaEvidencia: String(r.evidencia_leona || '').trim(),
+      notaHoja: String(r.notas || '').trim(), borrador: estado === 'borrador' });
+  });
+  return out;
 }
 
 async function cargarCotizaciones() {
@@ -4293,11 +4351,14 @@ async function cargarCotizaciones() {
 }
 
 function renderCotizaciones() {
-  const regs = (COTIZACIONES && COTIZACIONES.registros) || [];
+  if (!COTIZACIONES) COTIZACIONES = COTIZACIONES_EMBEBIDAS;
+  const usaHoja = !!(state.cotizaciones && state.cotizaciones.length);
+  const regs = usaHoja ? regsDesdeHoja(state.cotizaciones) : ((COTIZACIONES && COTIZACIONES.registros) || []);
+  const desdeTxt = usaHoja ? (regs.map(x => x.fecha).sort()[0] || COTIZACIONES.desde) : COTIZACIONES.desde;
   show('loading-cotizaciones', false);
   show('content-cotizaciones', true);
   const info = document.getElementById('cot-info');
-  if (info) info.textContent = 'Auditoría desde el ' + fmtDate(COTIZACIONES.desde) + (COTIZACIONES.actualizado ? ' · actualizada el ' + fmtDate(COTIZACIONES.actualizado) : '') + ' · Metepec se audita desde el 18-nov a las 12:00.';
+  if (info) info.textContent = 'Auditoría desde el ' + fmtDate(desdeTxt) + (!usaHoja && COTIZACIONES.actualizado ? ' · actualizada el ' + fmtDate(COTIZACIONES.actualizado) : '') + (usaHoja ? ' · datos de la hoja Cotizaciones' : '') + ' · Metepec se audita desde el 18-nov a las 12:00.';
 
   // Si la fila tiene una nota (ej. "no se dio cotización"), se considera
   // revisada: deja de contar como incumplimiento y su resultado pasa a "Revisado".
@@ -4317,7 +4378,7 @@ function renderCotizaciones() {
   const dia = vis.filter(x => x.est.cotizada && x.est.mismoDia).length;
   const ok = vis.filter(x => x.est.key === 'ok' || x.est.revisado).length;
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-  set('cot-total', n); set('cot-con', con); set('cot-nuevo', nuevo); set('cot-dia', dia); set('cot-ok', ok); set('cot-pct', n ? Math.round(ok / n * 100) + '%' : '—');
+  set('cot-total', n); set('cot-con', con); set('cot-nuevo', nuevo); set('cot-dia', dia); set('cot-ok', ok); set('cot-leona', vis.filter(x => x.est.leona).length); set('cot-pct', n ? Math.round(ok / n * 100) + '%' : '—');
 
   const porCoord = {};
   filas.forEach(x => {
@@ -4350,7 +4411,12 @@ function renderCotizaciones() {
     : vis.slice().sort((a, b) => fmtDate(b.r.fecha).localeCompare(fmtDate(a.r.fecha)) || a.r.paciente.localeCompare(b.r.paciente)).map(x => {
         const c = x.r.cotizacion;
         const tag = x.r.sede === 'GDL' ? 'tag-gdl' : x.r.sede === 'MET' ? 'tag-met' : 'tag-cdmx';
-        const cotizada = c ? `${fmtDate(c.publicada)}${c.hora ? ' · ' + c.hora : ''}${c.envio_por ? '<br><span style="color:var(--muted);font-size:10px;">' + c.envio_por + '</span>' : ''}` : '—';
+        let cotizada = c ? `${fmtDate(c.publicada)}${c.hora ? ' · ' + c.hora : ''}${c.envio_por ? '<br><span style="color:var(--muted);font-size:10px;">' + c.envio_por + '</span>' : ''}` : (x.r.borrador ? 'Borrador' : '—');
+        if (x.r.hoja) {
+          const lt = x.r.leonaEnvio ? 'Leona: ' + escHtml(x.r.leonaEnvio) + (x.r.leonaEvidencia ? ' · ' + escHtml(x.r.leonaEvidencia) : '') : (x.r.leonaEstado === 'sin' ? 'Leona: ' + escHtml(x.r.leonaEvidencia || 'sin evidencia') : '');
+          if (lt) cotizada += '<br><span style="color:var(--muted);font-size:10px;">' + lt + '</span>';
+          if (x.r.notaHoja) cotizada += '<br><span style="color:var(--muted);font-size:10px;font-style:italic;">' + escHtml(x.r.notaHoja) + '</span>';
+        }
         return `<tr>
           <td>${fmtDate(x.r.fecha)}</td>
           <td>${x.r.paciente}</td>
@@ -4411,6 +4477,8 @@ async function autoLoadFromGitHub() {
       } else if (key === 'citas_cdmx') {
         rows.forEach(r => r.__ciudad__ = 'CDMX');
         state.citas_cdmx = rows;
+      } else if (key === 'cotizaciones' || key === 'cotizacion') {
+        state.cotizaciones = rows;
       } else if (key === 'citas_mtp' || key === 'citas_met') {
         rows.forEach(r => r.__ciudad__ = 'MET');
         state.citas_met = rows;
@@ -4430,6 +4498,7 @@ async function autoLoadFromGitHub() {
 
     status.textContent = `${loaded} hojas cargadas`;
     renderAll();
+    try { if (state.cotizaciones && state.cotizaciones.length) renderCotizaciones(); } catch (e) { console.warn('cotizaciones', e); }
     if (state.sheetIT) renderExperiencia();
 
     // Respaldo del estado "en vivo" (lo que acaba de cargar datos.xlsx), para
