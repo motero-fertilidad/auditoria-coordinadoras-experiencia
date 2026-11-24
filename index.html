@@ -4361,8 +4361,11 @@ function coordDesdeNombreCot(s) {
 }
 // Coordinadora de la doctora/doctor de la consulta (la que responde si nadie cotiza).
 function coordDeMedicoCot(r) {
-  return getCoord({ 'Profesional': r.profesional, 'Profesional Historia': r.profesional,
-                    'Fecha': r.fecha, 'Concepto': r.concepto }, r.sede);
+  const por = (m) => getCoord({ 'Profesional': m, 'Profesional Historia': m,
+                                'Fecha': r.fecha, 'Concepto': r.concepto }, r.sede);
+  // Primero el médico principal de la paciente (el de su historia); si no está
+  // en el roster de ninguna coordinadora, el médico que dio la consulta.
+  return (r.medicoPrincipal && por(r.medicoPrincipal)) || por(r.profesional);
 }
 // La cotización cuenta para quien la creó (aunque no sea la coordinadora del
 // médico, por ejemplo por horarios); si no hay cotización o no se reconoce
@@ -4436,6 +4439,7 @@ function regsDesdeHoja(rows) {
     out.push({ hoja: true, fecha, paciente: pac, sede, concepto: String(r.tipo_consulta || '').trim(),
       profesional: String(r.profesional || '').trim(), cotizacion: cot, leonaEstado,
       creadaPor: String(r.coordinadora || '').trim(),
+      medicoPrincipal: String(r.medico_principal || '').trim(),
       leonaEnvio: String(r.envio_leona || '').trim(), leonaEvidencia: String(r.evidencia_leona || '').trim(),
       notaHoja: String(r.notas || '').trim(), borrador: estado === 'borrador' });
   });
