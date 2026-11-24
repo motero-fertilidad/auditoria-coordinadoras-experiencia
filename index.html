@@ -4348,9 +4348,28 @@ function normPlantilla(s) {
 }
 function plantillaCotEsNueva(p) { return PLANTILLAS_COT_NUEVAS.includes(normPlantilla(p)); }
 
-function coordDeCotizacion(r) {
+// Nombre de quien creó la cotización en HubSpot -> coordinadora del dashboard.
+function coordDesdeNombreCot(s) {
+  const n = normName(String(s || ''));
+  if (!n) return null;
+  if (n.includes('jaqueline') || n.includes('jacqueline')) return 'Jacqueline';
+  if (n.includes('maria isabel') || n === 'isabel') return 'Isabel';
+  if (n.includes('viviana')) return 'Viviana';
+  const words = n.split(/\s+/);
+  for (const c of COORD_LIST) { if (words.includes(normName(c))) return c; }
+  return null;
+}
+// Coordinadora de la doctora/doctor de la consulta (la que responde si nadie cotiza).
+function coordDeMedicoCot(r) {
   return getCoord({ 'Profesional': r.profesional, 'Profesional Historia': r.profesional,
                     'Fecha': r.fecha, 'Concepto': r.concepto }, r.sede);
+}
+// La cotización cuenta para quien la creó (aunque no sea la coordinadora del
+// médico, por ejemplo por horarios); si no hay cotización o no se reconoce
+// quién la creó, cuenta para la coordinadora del médico.
+function coordDeCotizacion(r) {
+  const creo = coordDesdeNombreCot(r.creadaPor || (r.cotizacion && r.cotizacion.envio_por));
+  return creo || coordDeMedicoCot(r);
 }
 
 // Devuelve {key, label, cls, nuevo, mismoDia, cotizada}
@@ -4416,6 +4435,7 @@ function regsDesdeHoja(rows) {
     const leonaEstado = ce === 'si' ? 'ok' : (ce === 'sin evidencia' || ce === 'no') ? 'sin' : (ce.startsWith('n/a') ? 'na' : 'pendiente');
     out.push({ hoja: true, fecha, paciente: pac, sede, concepto: String(r.tipo_consulta || '').trim(),
       profesional: String(r.profesional || '').trim(), cotizacion: cot, leonaEstado,
+      creadaPor: String(r.coordinadora || '').trim(),
       leonaEnvio: String(r.envio_leona || '').trim(), leonaEvidencia: String(r.evidencia_leona || '').trim(),
       notaHoja: String(r.notas || '').trim(), borrador: estado === 'borrador' });
   });
@@ -4505,7 +4525,7 @@ function renderCotizaciones() {
           <td>${x.r.paciente}</td>
           <td><span class="tag ${tag}">${x.r.sede}</span></td>
           <td>${x.r.concepto}</td>
-          <td>${x.coord || '—'}</td>
+          <td>${x.coord || '—'}${(() => { const m = coordDeMedicoCot(x.r); return (x.coord && m && m !== x.coord) ? '<br><span style="color:var(--muted);font-size:10px;">Médico de ' + m + '</span>' : ''; })()}</td>
           <td>${cotizada}</td>
           <td><span class="pill ${x.est.cls}">${x.est.label}</span></td>
           ${notaCellHTML('cotizaciones', x.r.paciente, fmtDate(x.r.fecha), x.r.concepto)}
