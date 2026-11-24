@@ -1117,7 +1117,8 @@ const ADDON_DONACION = [
   // Sperm Bank..." como subcadena, pero se listan explícito por claridad.
   'donante europeo', 'donacion esperma', 'donación esperma', 'muestra de esperma fi',
   // Donante fresco (Genevity) -- Sharon vendió 1, sep-2026.
-  'donante fresco', 'genevity',
+  'donante fresco', 'genevity', 'donante congelado', 'vigfus',
+  // Genevity congelado (VIGFUS) y Genevity traslado -- Julie Mach, 20-nov-2026.
   // Ovodonor (traslado y fresco) -- se cuentan como add-on de Donación.
   // En los cargos aparecen como "Ovodonors en fresco 00xx" y "Viaticos
   // ovodonors" (traslado), por eso se cubren singular/plural y variantes.
@@ -1927,6 +1928,9 @@ function computeAddonsList(cargos, citas) {
     // Add-ons que se pasan de septiembre a octubre (ver ADDONS_MOVIDOS_A_OCT):
     // se quitan de septiembre aquí y se inyectan en octubre al final.
     if (ADDONS_MOVIDOS_A_OCT.some(m => m.match(normName(name), fecha, combined))) return;
+
+    // Genevity traslado NO es add-on (solo Genevity congelado / VIGFUS).
+    if (combined.includes('genevity') && combined.includes('traslado')) return;
 
     // Helper para push con profHist incluido
     const push = (obj) => addons.push({...obj, _profHist: profHist, _usuarioAlta: usuarioAlta});
