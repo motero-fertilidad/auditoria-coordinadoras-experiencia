@@ -1,5 +1,5 @@
 {
-  "actualizado": "2026-11-23",
+  "actualizado": "2026-11-24",
   "desde": "2026-11-17",
   "registros": [
     {
@@ -627,6 +627,95 @@
       "concepto": "Fertility Check up Mujeres",
       "profesional": "David Alejandro Laguna Pérez",
       "cotizacion": null,
+      "leona": "sin_verificar"
+    },
+    {
+      "fecha": "2026-11-23",
+      "paciente": "Villalba García, Alejandra",
+      "sede": "CDMX",
+      "concepto": "Consulta primera vez",
+      "profesional": "Miranda Lucía Morán Morales",
+      "cotizacion": {
+        "id": 46271962404,
+        "titulo": "CDO - Alejandra Villalba García",
+        "plantilla": "Nueva Cotización FI_2026",
+        "publicada": "2026-11-23",
+        "hora": "12:17",
+        "envio_por": "Dulce Jaqueline Sandoval Gutiérrez"
+      },
+      "leona": "sin_verificar"
+    },
+    {
+      "fecha": "2026-11-23",
+      "paciente": "Luján Sitt, Nicole Estrella",
+      "sede": "CDMX",
+      "concepto": "Consulta primera vez",
+      "profesional": "Eugenia Morán Orozco",
+      "cotizacion": {
+        "id": 46272272433,
+        "titulo": "TR - Nicole Estrella Luján Sitt - 1",
+        "plantilla": "Nueva Cotización FI_2026",
+        "publicada": "2026-11-23",
+        "hora": "15:54",
+        "envio_por": "Ana Martinez"
+      },
+      "leona": "sin_verificar"
+    },
+    {
+      "fecha": "2026-11-23",
+      "paciente": "Michele Ross, Erica",
+      "sede": "CDMX",
+      "concepto": "Consulta primera vez online",
+      "profesional": "Jairo Hernando Pedraza Pinto",
+      "cotizacion": {
+        "id": 46272148072,
+        "titulo": "TR - Erica Michele Ross - 1",
+        "plantilla": "Nueva Cotización FI_2026",
+        "publicada": "2026-11-23",
+        "hora": "14:48",
+        "envio_por": "Eva Marquez"
+      },
+      "leona": "sin_verificar"
+    },
+    {
+      "fecha": "2026-11-23",
+      "paciente": "Gaitan Ortega, Lorena",
+      "sede": "CDMX",
+      "concepto": "Consulta primera vez",
+      "profesional": "Armando Miguel Roque Sanchez",
+      "cotizacion": {
+        "id": 46272210862,
+        "titulo": "TR - Lorena Gaitán Ortega - 1",
+        "plantilla": "Nueva Cotización FI_2026",
+        "publicada": "2026-11-23",
+        "hora": "17:34",
+        "envio_por": "Jimena Del Moral"
+      },
+      "leona": "sin_verificar"
+    },
+    {
+      "fecha": "2026-11-23",
+      "paciente": "de la Vega Resendiz, Jenifer",
+      "sede": "CDMX",
+      "concepto": "Consulta primera vez",
+      "profesional": "Jairo Hernando Pedraza Pinto",
+      "cotizacion": null,
+      "leona": "sin_verificar"
+    },
+    {
+      "fecha": "2026-11-23",
+      "paciente": "Clark Ibarra, Alexa",
+      "sede": "GDL",
+      "concepto": "Fertility Check up Mujeres",
+      "profesional": "Diana Duran",
+      "cotizacion": {
+        "id": 46272272943,
+        "titulo": "P3 - IN - Alexa Clark Ibarra - 1",
+        "plantilla": "Cotización FI estudios/medicamentos",
+        "publicada": "2026-11-23",
+        "hora": "18:33",
+        "envio_por": "Joselyne Saldaña"
+      },
       "leona": "sin_verificar"
     }
   ],
