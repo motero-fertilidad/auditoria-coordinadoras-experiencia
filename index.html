@@ -472,7 +472,7 @@
       </table></div>
     </div>
     <p style="font-size:11px;color:var(--muted);margin-top:14px;line-height:1.5;">
-      Reglas: cuentan las primeras veces de fertilidad (Fertility check up mujeres/parejas, Consulta primera vez, online, online gratis y Check up integral) con estado Terminada, en CDMX y GDL (y Metepec desde el miércoles 18-nov a las 12:00), sin (EX). Formato nuevo = plantilla "Nueva Cotización FI_2026", "Cotización FI estudios/medicamentos" o "Cotización FI seguimiento". Mismo día = fecha de publicación igual a la fecha de la consulta. Solo se audita HubSpot (Leona no); los datos vienen de la hoja «Cotizaciones» de datos.xlsx. Resultados: Cumple, Formato antiguo, No creada el mismo día o Revisado. Si la fila tiene una nota (ej. "no se dio cotización"), pasa a Revisado y ya no cuenta como incumplimiento.
+      Reglas: cuentan las primeras veces de fertilidad (Fertility check up mujeres/parejas, Consulta primera vez, online, online gratis y Check up integral) con estado Terminada, en CDMX y GDL (y Metepec desde el miércoles 18-nov a las 12:00), sin (EX). Formato nuevo = plantilla "Nueva Cotización FI_2026", "Cotización FI estudios/medicamentos" o "Cotización FI seguimiento". Mismo día = fecha de publicación igual a la fecha de la consulta. Solo se audita HubSpot (Leona no); los datos vienen de la hoja «Cotizaciones» de datos.xlsx. Si la cotización la crea alguien de ventas (Joselyne, Ximena, Itzel, Michelle, Yolo, Romina, Melina), el paciente no se incluye. Resultados: Cumple, Formato antiguo, No creada el mismo día o Revisado. Si la fila tiene una nota (ej. "no se dio cotización"), pasa a Revisado y ya no cuenta como incumplimiento.
     </p>
   </div>
 </div>
@@ -4411,6 +4411,12 @@ function normHoraCot(v) {
   const m = String(v).match(/(\d{1,2}):(\d{2})/);
   return m ? m[1].padStart(2, '0') + ':' + m[2] : String(v);
 }
+// Personal de ventas: si ellos crearon la cotización, el paciente no se incluye en la auditoría.
+const VENTAS_LIST = ['Joselyne','Ximena','Itzel','Michelle','Yolo','Romina','Melina'];
+function esVentasCot(s) {
+  const words = normName(String(s || '')).split(/\s+/);
+  return VENTAS_LIST.some(v => words.includes(normName(v)));
+}
 function regsDesdeHoja(rows) {
   const jr = ((COTIZACIONES && COTIZACIONES.registros) || COTIZACIONES_EMBEBIDAS.registros || []);
   const idx = {};
@@ -4434,6 +4440,7 @@ function regsDesdeHoja(rows) {
     } else if (estado === 'creada' && creada) {
       cot = { titulo: r.titulo_cotizacion || '', plantilla: '', publicada: fmtDate(creada), hora: normHoraCot(creada.slice(11)) };
     }
+    if (esVentasCot(r.coordinadora) || (cot && esVentasCot(cot.envio_por))) return;
     const ce = normName(r.cumple_envio_mismo_dia);
     const leonaEstado = ce === 'si' ? 'ok' : (ce === 'sin evidencia' || ce === 'no') ? 'sin' : (ce.startsWith('n/a') ? 'na' : 'pendiente');
     out.push({ hoja: true, fecha, paciente: pac, sede, concepto: String(r.tipo_consulta || '').trim(),
