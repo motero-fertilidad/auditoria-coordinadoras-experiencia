@@ -2049,6 +2049,8 @@ function computeAddonsList(cargos, citas) {
     });
   }
   addons.forEach(a => {
+    // Excepción manual (a petición): el Genevity de Mach, Julie (20-nov-2026) es de Eva.
+    if (normName(a.paciente) === normName('Mach, Julie') && a.fecha === '2026-11-20') { a.coord = 'Eva'; return; }
     // 1) Profesional Historia del cargo → mapa de doctores de CUALQUIER ciudad
     //    (no depende del campo "Entidad", que a veces no coincide con la sede
     //    real de la doctora y provocaba caer al fallback de Usuario Alta).
@@ -3623,7 +3625,7 @@ function showTab(id) {
 const PLANTILLAS_COT_NUEVAS = ['nueva cotizacion fi_2026', 'cotizacion fi estudios/medicamentos', 'cotizacion fi seguimiento'];
 let COTIZACIONES = { actualizado: '', desde: '', registros: [] };
 const COTIZACIONES_EMBEBIDAS = {
-  "actualizado": "2026-11-24",
+  "actualizado": "2026-11-27",
   "desde": "2026-11-17",
   "registros": [
     {
@@ -4338,7 +4340,7 @@ const COTIZACIONES_EMBEBIDAS = {
         "plantilla": "Cotización FI estudios/medicamentos",
         "publicada": "2026-11-23",
         "hora": "18:33",
-        "envio_por": "Joselyne Saldaña"
+        "envio_por": "Araceli"
       },
       "leona": "sin_verificar"
     }
